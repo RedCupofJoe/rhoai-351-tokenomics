@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-FINOPS_NAMESPACE="${FINOPS_NAMESPACE:-maas-finops}"
+FINOPS_NAMESPACE="${FINOPS_NAMESPACE:-maas-finops-ui}"
 UI_NAMESPACE="${UI_NAMESPACE:-maas-finops-ui}"
 OBS_NAMESPACE="${OBS_NAMESPACE:-redhat-ods-monitoring}"
 MAAS_NAMESPACE="${MAAS_NAMESPACE:-models-as-a-service}"
@@ -102,7 +102,10 @@ phase3() {
     --dry-run=client -o yaml | oc apply -f -
   oc -n "${OBS_NAMESPACE}" label configmap maas-tokenomics-dashboard \
     grafana_dashboard=1 \
-    app.kubernetes.io/part-of=rhoai-tokenomics \
+    console.openshift.io/odc-dashboard=true \
+    dashboard=true \
+    app.kubernetes.io/part-of=rhods-dashboard \
+    app.kubernetes.io/name=maas-tokenomics-dashboard \
     app.kubernetes.io/component=dashboard \
     --overwrite
   oc -n "${OBS_NAMESPACE}" annotate configmap maas-tokenomics-dashboard \

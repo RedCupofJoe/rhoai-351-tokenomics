@@ -101,7 +101,37 @@ def _constant_compare(left: str, right: str) -> bool:
     return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
 
 
+def _unwrap_log_forwarder(item: dict[str, Any]) -> dict[str, Any]:
+    """Turn a Cluster Logging or Vector record into a usage payload.
+
+    The collector posts its own envelope. The token counts stay in the
+    original JSON log line, under ``message`` or ``log``. The pod namespace
+    becomes the OpenShift project when the line does not already name one.
+    """
+    message = item.get("message")
+    if not isinstance(message, str):
+        message = item.get("log")
+    if not isinstance(message, str):
+        return item
+    text = message.strip()
+    if not text.startswith("{") and not text.startswith("["):
+        return item
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return item
+    if not isinstance(parsed, dict):
+        return item
+    kube = item.get("kubernetes") if isinstance(item.get("kubernetes"), dict) else {}
+    namespace = str(kube.get("namespace_name") or kube.get("namespace") or "").strip()
+    if namespace and not any(parsed.get(key) for key in ("namespace", "openshift_project", "project")):
+        parsed = dict(parsed)
+        parsed["namespace"] = namespace
+    return parsed
+
+
 def _event_from_push(item: dict[str, Any], cache_included_in_prompt: bool) -> UsageEvent | None:
+    item = _unwrap_log_forwarder(item)
     standard = item.get("standard_logging_object")
     if isinstance(standard, dict):
         item = standard

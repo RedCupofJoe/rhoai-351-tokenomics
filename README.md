@@ -53,7 +53,7 @@ The pricing page and the exporter are customer code. They run on Red Hat OpenShi
 
 | Tooling | Product | Role |
 | --- | --- | --- |
-| Namespaces, service accounts, RBAC, ConfigMaps, PVCs, Deployments, Services, Routes, NetworkPolicies | OpenShift | Runs the exporter and the pricing page |
+| Namespaces, service accounts, RBAC, ConfigMaps, PVCs, Deployments, Services, Routes, NetworkPolicies | OpenShift | Runs the standalone exporter and the pricing page in `maas-finops-ui`. The exporter is not added to a MaaS pod |
 | `oauth-proxy` (`registry.redhat.io/openshift4/ose-oauth-proxy-rhel9`) | OpenShift | Signs the pricing route in with the cluster identity |
 | Service CA | OpenShift | TLS for the proxy and for Thanos queries |
 | User-workload monitoring, `ServiceMonitor`, Prometheus Operator, Thanos Querier | OpenShift | Scrapes `maas_user_token_usage_total` and answers the pricing page |
@@ -89,7 +89,22 @@ Showback covers usage observed between the first and last scrape in the selected
 
 ## Deploy
 
-Prerequisites: `oc` logged in, user-workload monitoring enabled, and permission to create namespaces. Phase 3 also needs the RHOAI monitoring namespace (`redhat-ods-monitoring` on self-managed OpenShift AI, `opendatahub` on Open Data Hub).
+Prerequisites: `oc` logged in as a user who can create namespaces, and user-workload monitoring enabled. Phase 3 also needs the RHOAI monitoring namespace (`redhat-ods-monitoring` on self-managed OpenShift AI, `opendatahub` on Open Data Hub).
+
+User-workload monitoring is off on a new cluster. The exporter ServiceMonitor is ignored until this is set. `deploy.sh` does not edit `openshift-monitoring`. Enable it once, as a cluster admin:
+
+```bash
+oc -n openshift-monitoring create configmap cluster-monitoring-config \
+  --from-literal=config.yaml='enableUserWorkload: true'
+```
+
+If that ConfigMap already exists, add `enableUserWorkload: true` at the top of `data.config.yaml` and leave every other key in place:
+
+```bash
+oc -n openshift-monitoring edit configmap cluster-monitoring-config
+```
+
+Or run `./scripts/enable-user-workload-monitoring.sh`, which creates the ConfigMap or sets that one key. Then wait until pods appear in `openshift-user-workload-monitoring`.
 
 ```bash
 ./deploy.sh 1
@@ -100,14 +115,16 @@ Prerequisites: `oc` logged in, user-workload monitoring enabled, and permission 
 `./deploy.sh` alone runs all four phases and expects the images to exist. Override namespaces and images with the variables in `deploy/env.example`.
 
 ```bash
-export FINOPS_NAMESPACE=maas-finops
+export FINOPS_NAMESPACE=maas-finops-ui
 export UI_NAMESPACE=maas-finops-ui
 export OBS_NAMESPACE=redhat-ods-monitoring
-export EXPORTER_IMAGE=image-registry.openshift-image-registry.svc:5000/maas-finops/maas-tokenomics-exporter:0.1.0
+export EXPORTER_IMAGE=image-registry.openshift-image-registry.svc:5000/maas-finops-ui/maas-tokenomics-exporter:0.1.0
 export UI_IMAGE=image-registry.openshift-image-registry.svc:5000/maas-finops-ui/maas-tokenomics-ui:0.1.0
 ```
 
-Phase 3 creates new dashboard objects. It does not edit the existing MaaS Usage dashboard. The Grafana ConfigMap is labeled `grafana_dashboard=1`. A `GrafanaDashboard` or `PersesDashboard` is applied only when that CRD is already installed.
+The exporter Deployment stays in `FINOPS_NAMESPACE` (default `maas-finops-ui`). It is a separate Deployment. It pulls MLflow when `MLFLOW_TRACKING_URI` is set, and it accepts usage JSON on `POST /v1/usage`. OpenShift Cluster Logging can forward MaaS pod logs to that endpoint with `deploy/optional/cluster-log-forwarder.yaml`. That file is not applied by `deploy.sh`.
+
+Phase 3 creates new dashboard objects. It does not edit the existing MaaS Usage dashboard. The Grafana ConfigMap is labeled `grafana_dashboard=1`, `console.openshift.io/odc-dashboard=true`, `dashboard=true`, and `app.kubernetes.io/part-of=rhods-dashboard`. The Perses dashboard is labeled `app.opendatahub.io/dashboard=true` and `platform.opendatahub.io/part-of=dashboard`, which is what the OpenShift AI 3.5 Observability UI selects. A `GrafanaDashboard` or `PersesDashboard` is applied only when that CRD is already installed.
 
 The Perses datasource name defaults to `data-science-prometheus-datasource`. If that store does not contain user-workload series, set `PERSES_DATASOURCE` to the datasource that can query Thanos, or use the Grafana dashboard against user-workload monitoring.
 
@@ -122,7 +139,7 @@ The gateway or trace must record that same OpenShift username. A different LiteL
 The break-glass token in `maas-pricing-admin` is also an administrator. It is for operators. Cluster users do not need it.
 
 ```bash
-oc -n maas-finops get secret maas-tokenomics-credentials -o jsonpath='{.data.ingest-token}' | base64 -d; echo
+oc -n maas-finops-ui get secret maas-tokenomics-credentials -o jsonpath='{.data.ingest-token}' | base64 -d; echo
 oc -n maas-finops-ui get secret maas-pricing-admin -o jsonpath='{.data.token}' | base64 -d; echo
 oc -n maas-finops-ui get route maas-pricing
 ```
@@ -134,20 +151,20 @@ The route uses an `oauth-proxy` sidecar. Set `OAUTH_PROXY_IMAGE` to the tag that
 Edit the exporter ConfigMap and restart. This does not change the MaaS pods.
 
 ```bash
-oc -n maas-finops patch configmap maas-tokenomics-exporter --type merge -p '{"data":{"MLFLOW_TRACKING_URI":"http://mlflow.models-as-a-service.svc:5000"}}'
-oc -n maas-finops rollout restart deploy/maas-tokenomics-exporter
+oc -n maas-finops-ui patch configmap maas-tokenomics-exporter --type merge -p '{"data":{"MLFLOW_TRACKING_URI":"http://mlflow.models-as-a-service.svc:5000"}}'
+oc -n maas-finops-ui rollout restart deploy/maas-tokenomics-exporter
 ```
 
 To attach a LiteLLM master key:
 
 ```bash
-oc -n maas-finops patch secret maas-tokenomics-credentials --type merge -p '{"stringData":{"litellm-api-key":"REPLACE_ME"}}'
+oc -n maas-finops-ui patch secret maas-tokenomics-credentials --type merge -p '{"stringData":{"litellm-api-key":"REPLACE_ME"}}'
 ```
 
 To push logs without a callback installed in MaaS, post the LiteLLM standard logging object yourself:
 
 ```bash
-curl -sS -X POST "http://maas-tokenomics-exporter.maas-finops.svc:8080/v1/usage" \
+curl -sS -X POST "http://maas-tokenomics-exporter.maas-finops-ui.svc:8080/v1/usage" \
   -H "Authorization: Bearer ${INGEST_TOKEN}" \
   -H "Content-Type: application/json" \
   --data @examples/litellm-usage.json

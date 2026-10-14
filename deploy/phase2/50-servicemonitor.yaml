@@ -8,9 +8,14 @@ metadata:
     app.kubernetes.io/part-of: rhoai-tokenomics
     app.kubernetes.io/component: exporter
 spec:
+  namespaceSelector:
+    matchNames:
+      - __FINOPS_NAMESPACE__
   selector:
     matchLabels:
       app.kubernetes.io/name: maas-tokenomics-exporter
+      app.kubernetes.io/part-of: rhoai-tokenomics
+      app.kubernetes.io/component: exporter
   endpoints:
     - port: metrics
       path: /metrics

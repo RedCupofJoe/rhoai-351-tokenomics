@@ -140,7 +140,32 @@ def test_push_endpoint_rejects_missing_token_and_counts_once(tmp_path: Path) -> 
     with urllib.request.urlopen(accepted, timeout=2) as response:
         body = json.loads(response.read().decode())
     assert body["duplicates"] == 1
+    forwarded = json.dumps(
+        {
+            "message": json.dumps(
+                {
+                    "id": "push-2",
+                    "user": "alice",
+                    "model": "gemma-4",
+                    "prompt_tokens": 4,
+                    "completion_tokens": 1,
+                    "total_tokens": 5,
+                }
+            ),
+            "kubernetes": {"namespace_name": "models-as-a-service", "pod_name": "gateway-0"},
+        }
+    ).encode()
+    forwarded_request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/v1/usage",
+        data=forwarded,
+        method="POST",
+        headers={"Authorization": "Bearer ingest-secret", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(forwarded_request, timeout=2) as response:
+        body = json.loads(response.read().decode())
+    assert body == {"accepted": 1, "duplicates": 0}
     metrics_body = urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=2).read().decode()
     assert 'user="alice"' in metrics_body
+    assert 'namespace="models-as-a-service"' in metrics_body
     server.shutdown()
     checkpoint.close()

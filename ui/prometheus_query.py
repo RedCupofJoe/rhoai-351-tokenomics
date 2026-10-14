@@ -31,8 +31,10 @@ class PrometheusClient:
         if url.startswith("https"):
             if self.insecure:
                 context = ssl._create_unverified_context()
+            elif not self.ca_file:
+                raise PrometheusError("PROMETHEUS_CA_FILE is required for https://thanos-querier")
             else:
-                context = ssl.create_default_context(cafile=self.ca_file if self.ca_file else None)
+                context = ssl.create_default_context(cafile=self.ca_file)
         try:
             with urllib.request.urlopen(request, timeout=self.timeout, context=context) as response:
                 payload = json.loads(response.read().decode("utf-8"))

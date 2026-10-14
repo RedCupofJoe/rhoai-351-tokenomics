@@ -10,11 +10,10 @@ These are new objects. They are not patches of existing MaaS objects.
 
 | Phase | Objects | Namespace |
 | --- | --- | --- |
-| 1 | Namespace, ServiceAccount `maas-tokenomics-exporter` | `maas-finops` |
-| 1 | Namespace, ServiceAccount `maas-pricing-ui` | `maas-finops-ui` |
+| 1 | Namespace, ServiceAccount `maas-tokenomics-exporter`, ServiceAccount `maas-pricing-ui` | `maas-finops-ui` |
 | 1 | ClusterRoleBinding to the existing `cluster-monitoring-view` role | cluster |
 | 1 | ClusterRole `maas-tokenomics-auth-review` and a binding for the pricing UI service account. This allows `create` on `subjectaccessreviews` so the UI can tell a cluster admin from a normal user. It does not grant admin rights. | cluster |
-| 2 | ConfigMap, PVC, Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops` |
+| 2 | ConfigMap, PVC, standalone Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops-ui` |
 | 3 | ConfigMap `maas-tokenomics-dashboard` | RHOAI monitoring namespace, default `redhat-ods-monitoring` |
 | 3 | `GrafanaDashboard` `maas-tokenomics`, only if that CRD already exists | same |
 | 3 | `PersesDashboard` `dashboard-maas-tokenomics`, only if that CRD already exists | same |
@@ -37,7 +36,7 @@ This creates Role and RoleBinding `maas-tokenomics-log-reader` in `MAAS_NAMESPAC
 After the Role exists, turn the reader on in the exporter namespace:
 
 ```bash
-oc -n maas-finops patch configmap maas-tokenomics-exporter --type merge -p '{
+oc -n maas-finops-ui patch configmap maas-tokenomics-exporter --type merge -p '{
   "data": {
     "ENABLE_POD_LOGS": "true",
     "POD_LOG_NAMESPACES": "models-as-a-service",
@@ -45,7 +44,7 @@ oc -n maas-finops patch configmap maas-tokenomics-exporter --type merge -p '{
     "POD_LOG_CONTAINER": ""
   }
 }'
-oc -n maas-finops rollout restart deploy/maas-tokenomics-exporter
+oc -n maas-finops-ui rollout restart deploy/maas-tokenomics-exporter
 ```
 
 Change the label selector to the pods that already emit JSON usage lines. Leave `POD_LOG_CONTAINER` empty to read every container in those pods.
@@ -61,7 +60,7 @@ File to copy into the LiteLLM image or a mounted config volume:
 Environment to add on the LiteLLM Deployment:
 
 ```text
-MAAS_TOKENOMICS_INGEST_URL=http://maas-tokenomics-exporter.maas-finops.svc:8080/v1/usage
+MAAS_TOKENOMICS_INGEST_URL=http://maas-tokenomics-exporter.maas-finops-ui.svc:8080/v1/usage
 MAAS_TOKENOMICS_INGEST_TOKEN=<ingest-token from maas-tokenomics-credentials>
 ```
 
@@ -88,7 +87,8 @@ Enabling MLflow tracing on a gateway or model pod that does not already emit tra
 - No `DataScienceCluster` or `DataScienceClusterInitialization` field is set, including metrics exporters.
 - No OpenTelemetry Collector config is rewritten.
 - No Limitador `TokenRateLimitPolicy` or TelemetryPolicy is edited. `authorized_hits` stays the combined gateway total.
-- User-workload monitoring is required for the ServiceMonitor and is not enabled by this script. Enabling it is a cluster-monitoring change in `openshift-monitoring`, owned by a cluster administrator.
+- User-workload monitoring is required for the ServiceMonitor and is not enabled by `deploy.sh`. A cluster administrator turns it on with `./scripts/enable-user-workload-monitoring.sh`. That edits `cluster-monitoring-config` in `openshift-monitoring`.
+- `deploy/optional/cluster-log-forwarder.yaml` is not applied by `deploy.sh`. It is an optional ClusterLogForwarder that posts MaaS application logs to the exporter. It does not change a MaaS pod.
 
 ## 5. If the Observability tab has no Tokenomics series
 

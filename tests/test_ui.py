@@ -4,7 +4,52 @@ from fastapi.testclient import TestClient
 
 from ui.app import create_app, demo_series
 from ui.pricing_store import PricingStore
+from ui.prometheus_query import PrometheusClient, PrometheusError
 from ui.showback import aggregate_series, counter_increase
+
+
+def test_thanos_query_uses_service_account_token_and_service_ca(tmp_path: Path, monkeypatch) -> None:
+    token = tmp_path / "token"
+    token.write_text("sa-token\n", encoding="utf-8")
+    ca = tmp_path / "service-ca.crt"
+    ca.write_text("not-a-real-ca", encoding="utf-8")
+    client = PrometheusClient(
+        "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091",
+        str(token),
+        str(ca),
+        timeout=5,
+    )
+    captured: dict = {}
+
+    class _Response:
+        def read(self) -> bytes:
+            return b'{"status":"success","data":{"result":[]}}'
+
+        def __enter__(self) -> "_Response":
+            return self
+
+        def __exit__(self, *args: object) -> bool:
+            return False
+
+    def fake_urlopen(request, timeout, context):
+        captured["authorization"] = request.get_header("Authorization")
+        captured["url"] = request.full_url
+        captured["cafile"] = context
+        captured["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr("ui.prometheus_query.ssl.create_default_context", lambda cafile=None: cafile)
+    monkeypatch.setattr("ui.prometheus_query.urllib.request.urlopen", fake_urlopen)
+    assert client.query_range("maas_user_token_usage_total", 1.0, 2.0, 30) == []
+    assert captured["authorization"] == "Bearer sa-token"
+    assert captured["cafile"] == str(ca)
+    assert "/api/v1/query_range?" in captured["url"]
+    missing = PrometheusClient("https://thanos-querier.openshift-monitoring.svc:9091", str(token), "", 5)
+    try:
+        missing.query_range("up", 1.0, 2.0, 30)
+        raise AssertionError("https without a CA file must fail")
+    except PrometheusError as exc:
+        assert "PROMETHEUS_CA_FILE" in str(exc)
 
 
 def test_counter_increase_handles_reset() -> None:

@@ -8,6 +8,8 @@ metadata:
   labels:
     app.kubernetes.io/part-of: rhoai-tokenomics
     app.kubernetes.io/component: dashboard
+    app.opendatahub.io/dashboard: "true"
+    platform.opendatahub.io/part-of: dashboard
 spec:
   display:
     name: Tokenomics

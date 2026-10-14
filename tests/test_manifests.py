@@ -52,6 +52,40 @@ def test_grafana_dashboard_contract() -> None:
     assert 'token_type=\\"input\\"' in joined or 'token_type="input"' in joined
 
 
+def test_servicemonitor_matches_exporter_service() -> None:
+    service = next(yaml.safe_load_all(render((ROOT / "deploy/phase2/40-service.yaml").read_text(encoding="utf-8"))))
+    monitor = next(yaml.safe_load_all(render((ROOT / "deploy/phase2/50-servicemonitor.yaml").read_text(encoding="utf-8"))))
+    labels = service["metadata"]["labels"]
+    match = monitor["spec"]["selector"]["matchLabels"]
+    assert match
+    assert match.items() <= labels.items()
+    assert monitor["spec"]["namespaceSelector"]["matchNames"] == [service["metadata"]["namespace"]]
+    assert monitor["spec"]["endpoints"][0]["port"] == "metrics"
+    assert any(port["name"] == "metrics" for port in service["spec"]["ports"])
+
+
+def test_ui_serviceaccount_can_view_thanos() -> None:
+    binding = next(
+        doc
+        for doc in yaml.safe_load_all(render((ROOT / "deploy/phase1/20-monitoring-rbac.yaml").read_text(encoding="utf-8")))
+        if doc["kind"] == "ClusterRoleBinding"
+    )
+    assert binding["roleRef"]["name"] == "cluster-monitoring-view"
+    subject = binding["subjects"][0]
+    assert subject["name"] == "maas-pricing-ui"
+    assert subject["namespace"] == "maas-finops-ui"
+
+
+def test_dashboard_configmap_labels_are_applied_by_deploy() -> None:
+    script = (ROOT / "deploy.sh").read_text(encoding="utf-8")
+    for label in (
+        "console.openshift.io/odc-dashboard=true",
+        "dashboard=true",
+        "app.kubernetes.io/part-of=rhods-dashboard",
+    ):
+        assert label in script
+
+
 def test_deploy_script_renders_without_placeholders() -> None:
     import subprocess
 

@@ -1,0 +1,37 @@
+# Optional. deploy.sh does not apply this file.
+# Forwards application logs from the MaaS namespace to the standalone exporter.
+# It does not add a sidecar or change a MaaS Deployment.
+# Replace REPLACE_WITH_INGEST_TOKEN with the maas-tokenomics-credentials ingest-token.
+# Do not name this object "instance" if a ClusterLogForwarder of that name
+# already owns cluster log routing.
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: maas-tokenomics
+  namespace: openshift-logging
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: exporter
+spec:
+  inputs:
+    - name: maas-application
+      type: application
+      application:
+        includes:
+          - namespace: __MAAS_NAMESPACE__
+  outputs:
+    - name: tokenomics-http
+      type: http
+      http:
+        url: "http://maas-tokenomics-exporter.__FINOPS_NAMESPACE__.svc:8080/v1/usage"
+        method: POST
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer REPLACE_WITH_INGEST_TOKEN"
+        timeout: 10s
+  pipelines:
+    - name: maas-token-usage
+      inputRefs:
+        - maas-application
+      outputRefs:
+        - tokenomics-http

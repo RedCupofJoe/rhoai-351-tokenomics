@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FINOPS_NAMESPACE="${FINOPS_NAMESPACE:-maas-finops}"
+FINOPS_NAMESPACE="${FINOPS_NAMESPACE:-maas-finops-ui}"
 UI_NAMESPACE="${UI_NAMESPACE:-maas-finops-ui}"
 
 if ! command -v oc >/dev/null 2>&1; then

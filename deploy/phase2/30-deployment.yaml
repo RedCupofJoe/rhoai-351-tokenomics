@@ -1,3 +1,6 @@
+# Standalone exporter. Do not add this container to a MaaS Deployment or
+# StatefulSet. OpenShift AI operators revert those objects. This Deployment
+# only reads MLflow or receives logs forwarded to /v1/usage.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
