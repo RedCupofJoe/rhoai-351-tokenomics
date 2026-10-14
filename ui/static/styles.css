@@ -50,13 +50,22 @@ h2 { margin: 0; font-size: 1.1rem; }
 .hidden { display: none; }
 
 label { display: block; font-size: 0.85rem; margin-bottom: 4px; }
-input {
+input, select {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid #8d8d8d;
   border-radius: 4px;
   font: inherit;
+  background: #fff;
 }
+
+input:disabled, select:disabled {
+  background: #f4f4f4;
+  color: var(--muted);
+}
+
+.filters select { width: auto; min-width: 12rem; }
+.filters label { margin-bottom: 4px; }
 
 button {
   background: var(--accent);
@@ -69,6 +78,7 @@ button {
 }
 
 button.active { outline: 2px solid #161616; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 .spans button { background: #e0e0e0; color: var(--ink); }
 .spans button.active { background: var(--accent); color: white; }
 

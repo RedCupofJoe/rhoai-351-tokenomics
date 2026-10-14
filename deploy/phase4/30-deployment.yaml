@@ -40,12 +40,16 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - name: LISTEN_HOST
+              value: "127.0.0.1"
             - name: LISTEN_PORT
               value: "8080"
             - name: PRICING_PATH
               value: /data/pricing.json
             - name: ADMIN_TOKEN_FILE
               value: /etc/pricing-admin/token
+            - name: ADMIN_GROUPS
+              value: system:cluster-admins,cluster-admins,rhods-admins,dedicated-admins
             - name: PROMETHEUS_URL
               value: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
             - name: PROMETHEUS_TOKEN_FILE
@@ -54,16 +58,22 @@ spec:
               value: /etc/service-ca/service-ca.crt
             - name: PROMETHEUS_TLS_INSECURE
               value: "false"
+            - name: AUTH_REVIEW
+              value: "true"
           readinessProbe:
-            httpGet:
-              path: /healthz
-              port: http
+            exec:
+              command:
+                - python
+                - -c
+                - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=2).read()
             initialDelaySeconds: 3
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: http
+            exec:
+              command:
+                - python
+                - -c
+                - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/healthz", timeout=2).read()
             initialDelaySeconds: 10
             periodSeconds: 20
           resources:
@@ -84,6 +94,53 @@ spec:
             - name: service-ca
               mountPath: /etc/service-ca
               readOnly: true
+        - name: oauth-proxy
+          image: __OAUTH_PROXY_IMAGE__
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: https
+              containerPort: 8443
+          args:
+            - --https-address=:8443
+            - --provider=openshift
+            - --openshift-service-account=maas-pricing-ui
+            - --upstream=http://127.0.0.1:8080
+            - --tls-cert=/etc/tls/private/tls.crt
+            - --tls-key=/etc/tls/private/tls.key
+            - --cookie-secret-file=/etc/proxy/secrets/session_secret
+            - --cookie-secure=true
+            - --skip-provider-button=true
+          readinessProbe:
+            tcpSocket:
+              port: https
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: https
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/tls/private
+              readOnly: true
+            - name: oauth-cookie
+              mountPath: /etc/proxy/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -96,3 +153,9 @@ spec:
         - name: service-ca
           configMap:
             name: openshift-service-ca
+        - name: tls
+          secret:
+            secretName: maas-pricing-ui-tls
+        - name: oauth-cookie
+          secret:
+            secretName: maas-pricing-oauth-cookie

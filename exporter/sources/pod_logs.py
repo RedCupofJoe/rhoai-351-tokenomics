@@ -62,7 +62,11 @@ class PodLogSource:
             if stamp:
                 last_stamp = stamp
             events.extend(
-                events_from_log_line(line, cache_included_in_prompt=self.config.cache_included_in_prompt)
+                events_from_log_line(
+                    line,
+                    cache_included_in_prompt=self.config.cache_included_in_prompt,
+                    project=namespace,
+                )
             )
         if last_stamp:
             self.checkpoint.set_state(key, last_stamp)

@@ -18,7 +18,7 @@
   <main>
     <section id="login" class="card">
       <h2>Sign in</h2>
-      <p>Use the admin token from the <code>maas-pricing-admin</code> secret. The token stays in this browser tab.</p>
+      <p>OpenShift users sign in through the cluster and see only their own usage. The token below is the break-glass administrator token from the <code>maas-pricing-admin</code> secret. It can view every user and project and can set prices.</p>
       <form id="login-form">
         <label for="token">Admin token</label>
         <input id="token" name="token" type="password" autocomplete="current-password" required>
@@ -43,6 +43,7 @@
 
       <section class="card">
         <h2>Cost per token</h2>
+        <p id="pricing-note" class="hint"></p>
         <form id="pricing-form">
           <div class="rates">
             <fieldset>
@@ -70,7 +71,7 @@
           <div class="row">
             <label for="currency">Currency</label>
             <input id="currency" maxlength="3" value="USD" required>
-            <button type="submit">Save prices</button>
+            <button id="save-prices" type="submit">Save prices</button>
             <p id="pricing-status" class="hint"></p>
           </div>
         </form>
@@ -78,8 +79,22 @@
 
       <section class="card">
         <div class="row">
-          <h2>Showback</h2>
+          <h2 id="showback-title">Usage</h2>
           <p id="report-meta" class="hint"></p>
+        </div>
+        <div class="row filters">
+          <div>
+            <label for="project-filter">Project</label>
+            <select id="project-filter"><option value="">All</option></select>
+          </div>
+          <div id="user-filter-wrap">
+            <label for="user-filter">User</label>
+            <select id="user-filter"><option value="">All</option></select>
+          </div>
+          <div>
+            <label for="model-filter">Model</label>
+            <select id="model-filter"><option value="">All</option></select>
+          </div>
         </div>
         <p id="report-error" class="error" role="alert"></p>
         <div class="table-wrap">
@@ -87,7 +102,8 @@
             <thead>
               <tr>
                 <th>User</th>
-                <th>Models</th>
+                <th>Project</th>
+                <th>Model</th>
                 <th class="num">Input tokens</th>
                 <th class="num">Cache tokens</th>
                 <th class="num">Decoded tokens</th>

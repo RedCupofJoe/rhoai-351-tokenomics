@@ -1,0 +1,29 @@
+# Lets the pricing UI ask whether a signed-in user has cluster-admin
+# wildcard access. It does not grant that access, and it does not change MaaS.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maas-tokenomics-auth-review
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: pricing-ui
+rules:
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: __UI_NAMESPACE__-auth-review
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: pricing-ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: maas-tokenomics-auth-review
+subjects:
+  - kind: ServiceAccount
+    name: maas-pricing-ui
+    namespace: __UI_NAMESPACE__

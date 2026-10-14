@@ -12,7 +12,7 @@ spec:
     kind: Service
     name: maas-pricing-ui
   port:
-    targetPort: http
+    targetPort: https
   tls:
-    termination: edge
+    termination: reencrypt
     insecureEdgeTerminationPolicy: Redirect

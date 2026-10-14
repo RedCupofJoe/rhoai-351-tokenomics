@@ -12,6 +12,7 @@ PLACEHOLDERS = {
     "__MAAS_NAMESPACE__": "models-as-a-service",
     "__EXPORTER_IMAGE__": "registry.example/exporter:0.1.0",
     "__UI_IMAGE__": "registry.example/ui:0.1.0",
+    "__OAUTH_PROXY_IMAGE__": "registry.example/oauth-proxy:v4.18",
     "__GRAFANA_LABEL__": "grafana",
     "__PERSES_DATASOURCE__": "data-science-prometheus-datasource",
 }
@@ -42,10 +43,11 @@ def test_grafana_dashboard_contract() -> None:
     assert dashboard["title"] == "Tokenomics"
     assert dashboard["uid"] == "maas-tokenomics"
     titles = {panel["title"] for panel in dashboard["panels"]}
-    assert {"Input tokens", "Cache tokens", "Decoded tokens", "Tokens by user and type"} <= titles
+    assert {"Input tokens", "Cache tokens", "Decoded tokens", "Tokens by user and model"} <= titles
     ranges = {item["display"] for item in dashboard["timepicker"]["quick_ranges"]}
     assert ranges == {"Last 1 hour", "Last 24 hours", "Last 7 days", "Last 30 days"}
     joined = json.dumps(dashboard)
+    assert "sum by (user, model, token_type)" in joined
     assert "maas_user_token_usage_total" in joined
     assert 'token_type=\\"input\\"' in joined or 'token_type="input"' in joined
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 TOKEN_TYPES: tuple[str, ...] = ("input", "cache", "decoded")
@@ -25,6 +25,7 @@ class UsageEvent:
     model: str
     tokens: dict[str, int]
     source: str
+    namespace: str = "unknown"
     timestamp: float | None = None
 
     def total_tokens(self) -> int:
@@ -238,6 +239,30 @@ def user_from_payload(payload: Mapping[str, Any]) -> str:
     return label_value(value)
 
 
+def _metadata(payload: Mapping[str, Any]) -> dict[str, Any]:
+    metadata = payload.get("metadata") or {}
+    if isinstance(metadata, str):
+        metadata = _parse_maybe_json(metadata) or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+_PROJECT_KEYS = ("namespace", "openshift_project", "project", "kubernetes_namespace")
+
+
+def project_from_payload(payload: Mapping[str, Any]) -> str:
+    """OpenShift project / Kubernetes namespace carried on a usage payload."""
+    metadata = _metadata(payload)
+    headers = metadata.get("requester_custom_headers") or {}
+    if not isinstance(headers, dict):
+        headers = {}
+    value = _first(headers, ("x-openshift-project", "x-namespace"))
+    if value is None:
+        value = _first(metadata, _PROJECT_KEYS)
+    if value is None:
+        value = _first(payload, _PROJECT_KEYS)
+    return label_value(value)
+
+
 def model_from_payload(payload: Mapping[str, Any]) -> str:
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     value = _first(payload, ("model", "model_group", "model_id"))
@@ -292,6 +317,7 @@ def event_from_usage_payload(
         model=model_from_payload(payload),
         tokens=tokens,
         source=source,
+        namespace=project_from_payload(payload),
         timestamp=float(timestamp) if isinstance(timestamp, (int, float)) else None,
     )
 
@@ -424,6 +450,13 @@ def event_from_mlflow_trace(
             user = candidate
     if user == "unknown":
         user = label_value(_first(tags, ("mlflow.user", "mlflow.trace.user", "user")))
+    project = _first(tags, ("openshift.project", "namespace", "mlflow.trace.namespace", "kubernetes.namespace"))
+    if project is None:
+        for span in selected:
+            attributes = normalize_attributes(span.get("attributes") or span.get("span_attributes"))
+            project = _first(attributes, _PROJECT_KEYS)
+            if project is not None:
+                break
     distinct = [model for model in dict.fromkeys(models) if model != "unknown"]
     if not distinct:
         model = "unknown"
@@ -442,11 +475,25 @@ def event_from_mlflow_trace(
         model=label_value(model),
         tokens=totals,
         source="mlflow",
+        namespace=label_value(project),
         timestamp=timestamp,
     )
 
 
-def events_from_log_line(line: str, cache_included_in_prompt: bool = True) -> list[UsageEvent]:
+def _with_project(event: UsageEvent | None, project: str) -> UsageEvent | None:
+    """Stamp the pod's OpenShift project when the payload did not carry one."""
+    if event is None or not project:
+        return event
+    if event.namespace != "unknown":
+        return event
+    return replace(event, namespace=label_value(project))
+
+
+def events_from_log_line(
+    line: str,
+    cache_included_in_prompt: bool = True,
+    project: str = "",
+) -> list[UsageEvent]:
     """Parse one container log line. Non-JSON lines are ignored."""
     text = line.strip()
     # ``kubectl logs --timestamps`` prefixes an RFC3339 timestamp before the payload.
@@ -468,17 +515,26 @@ def events_from_log_line(line: str, cache_included_in_prompt: bool = True) -> li
         events: list[UsageEvent] = []
         for item in payload:
             if isinstance(item, dict):
-                event = event_from_usage_payload(item, source="podlog", cache_included_in_prompt=cache_included_in_prompt)
+                event = _with_project(
+                    event_from_usage_payload(item, source="podlog", cache_included_in_prompt=cache_included_in_prompt),
+                    project,
+                )
                 if event:
                     events.append(event)
         return events
     if not isinstance(payload, dict):
         return []
     if "spans" in payload or (isinstance(payload.get("trace"), dict)) or (isinstance(payload.get("data"), dict) and "spans" in payload.get("data", {})):
-        event = event_from_mlflow_trace(payload, cache_included_in_prompt=cache_included_in_prompt)
+        event = _with_project(
+            event_from_mlflow_trace(payload, cache_included_in_prompt=cache_included_in_prompt),
+            project,
+        )
         return [event] if event else []
     standard = payload.get("standard_logging_object")
     if isinstance(standard, dict):
         payload = standard
-    event = event_from_usage_payload(payload, source="podlog", cache_included_in_prompt=cache_included_in_prompt)
+    event = _with_project(
+        event_from_usage_payload(payload, source="podlog", cache_included_in_prompt=cache_included_in_prompt),
+        project,
+    )
     return [event] if event else []

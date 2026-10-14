@@ -47,6 +47,33 @@ deploy/build                OpenShift BuildConfigs
 deploy.sh
 ```
 
+## Red Hat support
+
+The pricing page and the exporter are customer code. They run on Red Hat OpenShift and publish a dashboard into OpenShift AI Observability. The table below is the tooling around that code.
+
+| Tooling | Product | Role |
+| --- | --- | --- |
+| Namespaces, service accounts, RBAC, ConfigMaps, PVCs, Deployments, Services, Routes, NetworkPolicies | OpenShift | Runs the exporter and the pricing page |
+| `oauth-proxy` (`registry.redhat.io/openshift4/ose-oauth-proxy-rhel9`) | OpenShift | Signs the pricing route in with the cluster identity |
+| Service CA | OpenShift | TLS for the proxy and for Thanos queries |
+| User-workload monitoring, `ServiceMonitor`, Prometheus Operator, Thanos Querier | OpenShift | Scrapes `maas_user_token_usage_total` and answers the pricing page |
+| `BuildConfig`, `ImageStream`, internal registry | OpenShift | Builds the exporter and UI images |
+| UBI 9 Python 3.12 (`registry.access.redhat.com/ubi9/python-312`) | Red Hat UBI | Base image. The application copied onto it is customer code |
+| Optional pod-log Role | OpenShift API | Off unless `APPLY_LOG_RBAC=true` |
+| `PersesDashboard` in the OpenShift AI monitoring namespace | OpenShift AI Observability | Tokenomics view in the OpenShift AI UI. The CRD comes from the Cluster Observability Operator |
+| `cluster-prometheus-datasource` | OpenShift AI | Datasource that can read the Thanos series this exporter publishes |
+
+These are not Red Hat OpenShift or OpenShift AI components:
+
+| Tooling | What it is |
+| --- | --- |
+| Exporter and `tokenomics/` | This repository. OpenShift AI MaaS metrics (`authorized_hits`, `kserve_vllm:*`, `rhai_api_pricing_mtok`) do not carry per-user input, cache, and decoded tokens |
+| Pricing UI | FastAPI and the static page in `ui/` |
+| `prometheus-client` | PyPI library that writes the text format OpenShift Prometheus scrapes |
+| SQLite checkpoint | `sqlite3` from the UBI Python image, stored on the exporter PVC. It is not a Red Hat database service |
+| Grafana Operator (`grafana.integreatly.org`) and `deploy/phase3/tokenomics.json` | Community dashboard. `deploy.sh` applies it only when that CRD is already installed. OpenShift AI Observability uses the Perses dashboard |
+| MLflow Tracking API and LiteLLM spend logs | Optional readers. Both stay off until their URLs are set. OpenShift AI does not ship either as the MaaS usage API |
+
 ## Metrics
 
 ```text
@@ -84,7 +111,15 @@ Phase 3 creates new dashboard objects. It does not edit the existing MaaS Usage 
 
 The Perses datasource name defaults to `data-science-prometheus-datasource`. If that store does not contain user-workload series, set `PERSES_DATASOURCE` to the datasource that can query Thanos, or use the Grafana dashboard against user-workload monitoring.
 
-### Ingest token and admin token
+### Who can see usage
+
+Open the pricing route and sign in with OpenShift. A normal user sees only rows whose `user` label matches their OpenShift username, in every project where that user has usage. The price fields are visible and cannot be saved.
+
+An administrator sees every user and OpenShift project and can set the per-token rates. A user is an administrator when their token groups include `system:cluster-admins`, `cluster-admins`, `rhods-admins`, or `dedicated-admins`, when `ADMIN_USERS` lists them, or when a subject access review shows cluster-admin wildcard access. Override the groups with `ADMIN_GROUPS` on the pricing Deployment.
+
+The gateway or trace must record that same OpenShift username. A different LiteLLM user id will not appear on that person's page. An administrator still sees the recorded user label and its project.
+
+The break-glass token in `maas-pricing-admin` is also an administrator. It is for operators. Cluster users do not need it.
 
 ```bash
 oc -n maas-finops get secret maas-tokenomics-credentials -o jsonpath='{.data.ingest-token}' | base64 -d; echo
@@ -92,7 +127,7 @@ oc -n maas-finops-ui get secret maas-pricing-admin -o jsonpath='{.data.token}' |
 oc -n maas-finops-ui get route maas-pricing
 ```
 
-Open the route, enter the admin token, set the three rates, and pick 1h, 24h, 7d, or 30d.
+The route uses an `oauth-proxy` sidecar. Set `OAUTH_PROXY_IMAGE` to the tag that matches the cluster, for example `registry.redhat.io/openshift4/ose-oauth-proxy-rhel9:v4.18`.
 
 ### Turn on MLflow or LiteLLM reads
 
@@ -128,7 +163,7 @@ pytest
 TOKENOMICS_DEMO=1 ADMIN_TOKEN=dev PRICING_PATH=/tmp/pricing.json python -m ui.app
 ```
 
-`TOKENOMICS_DEMO` is for local UI checks. The Deployment does not set it.
+`TOKENOMICS_DEMO` is for local UI checks. The Deployment does not set it. While it is set, a browser can preview one user by storing the cookie `tokenomics-demo-user` with that OpenShift username. The cookie is ignored when demo mode is off.
 
 ## Uninstall
 
@@ -136,4 +171,4 @@ TOKENOMICS_DEMO=1 ADMIN_TOKEN=dev PRICING_PATH=/tmp/pricing.json python -m ui.ap
 ./deploy.sh undeploy
 ```
 
-That removes the two namespaces, the monitoring binding, the Tokenomics dashboards, and the optional log-reader Role if it was created. It does not delete MaaS, the RHOAI monitoring namespace, or the existing Usage dashboard.
+That removes the two namespaces, the monitoring binding, the auth-review binding and ClusterRole, the Tokenomics dashboards, and the optional log-reader Role if it was created. It does not delete MaaS, the RHOAI monitoring namespace, or the existing Usage dashboard.

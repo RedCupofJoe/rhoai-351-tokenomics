@@ -34,6 +34,23 @@ spec:
             labelName: user
             matchers:
               - maas_user_token_usage_total{user!=""}
+    - kind: ListVariable
+      spec:
+        allowAllValue: true
+        allowMultiple: true
+        defaultValue: $__all
+        display:
+          name: Model
+        name: model
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+              name: __PERSES_DATASOURCE__
+            labelName: model
+            matchers:
+              - maas_user_token_usage_total{model!=""}
   layouts:
     - kind: Grid
       spec:
@@ -102,7 +119,7 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum(increase(maas_user_token_usage_total{token_type="input",user=~"$user"}[$__range])) or vector(0)'
+                  query: 'sum(increase(maas_user_token_usage_total{token_type="input",user=~"$user",model=~"$model"}[$__range])) or vector(0)'
     cacheTokens:
       kind: Panel
       spec:
@@ -126,7 +143,7 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum(increase(maas_user_token_usage_total{token_type="cache",user=~"$user"}[$__range])) or vector(0)'
+                  query: 'sum(increase(maas_user_token_usage_total{token_type="cache",user=~"$user",model=~"$model"}[$__range])) or vector(0)'
     decodedTokens:
       kind: Panel
       spec:
@@ -150,7 +167,7 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum(increase(maas_user_token_usage_total{token_type="decoded",user=~"$user"}[$__range])) or vector(0)'
+                  query: 'sum(increase(maas_user_token_usage_total{token_type="decoded",user=~"$user",model=~"$model"}[$__range])) or vector(0)'
     totalTokens:
       kind: Panel
       spec:
@@ -174,7 +191,7 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum(increase(maas_user_token_usage_total{user=~"$user"}[$__range])) or vector(0)'
+                  query: 'sum(increase(maas_user_token_usage_total{user=~"$user",model=~"$model"}[$__range])) or vector(0)'
     tokenRate:
       kind: Panel
       spec:
@@ -205,13 +222,13 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum by (token_type) (rate(maas_user_token_usage_total{user=~"$user"}[5m]))'
+                  query: 'sum by (token_type) (rate(maas_user_token_usage_total{user=~"$user",model=~"$model"}[5m]))'
     byUser:
       kind: Panel
       spec:
         display:
-          name: Tokens by user
-          description: Input, cache, and decoded totals for the selected time span.
+          name: Tokens by user and model
+          description: Input, cache, and decoded totals for each model a user called in the selected time span.
         plugin:
           kind: Table
           spec:
@@ -222,6 +239,10 @@ spec:
                 hide: true
               - name: user
                 header: User
+                align: left
+                enableSorting: true
+              - name: model
+                header: Model
                 align: left
                 enableSorting: true
               - name: "value #1"
@@ -258,7 +279,7 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum by (user) (increase(maas_user_token_usage_total{token_type="input",user=~"$user"}[$__range]))'
+                  query: 'sum by (user, model) (increase(maas_user_token_usage_total{token_type="input",user=~"$user",model=~"$model"}[$__range]))'
           - kind: TimeSeriesQuery
             spec:
               plugin:
@@ -267,7 +288,7 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum by (user) (increase(maas_user_token_usage_total{token_type="cache",user=~"$user"}[$__range]))'
+                  query: 'sum by (user, model) (increase(maas_user_token_usage_total{token_type="cache",user=~"$user",model=~"$model"}[$__range]))'
           - kind: TimeSeriesQuery
             spec:
               plugin:
@@ -276,4 +297,4 @@ spec:
                   datasource:
                     kind: PrometheusDatasource
                     name: __PERSES_DATASOURCE__
-                  query: 'sum by (user) (increase(maas_user_token_usage_total{token_type="decoded",user=~"$user"}[$__range]))'
+                  query: 'sum by (user, model) (increase(maas_user_token_usage_total{token_type="decoded",user=~"$user",model=~"$model"}[$__range]))'

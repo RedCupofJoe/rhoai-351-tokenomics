@@ -31,11 +31,13 @@ class Recorder:
                 if count:
                     self.metrics.tokens.labels(
                         user=event.user,
+                        namespace=event.namespace,
                         token_type=kind,
                         model=event.model,
                     ).inc(count)
             self.metrics.requests.labels(
                 user=event.user,
+                namespace=event.namespace,
                 model=event.model,
                 source=event.source,
             ).inc()

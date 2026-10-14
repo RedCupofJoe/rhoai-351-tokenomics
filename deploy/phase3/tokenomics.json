@@ -19,7 +19,7 @@
         {
           "refId": "A",
           "instant": true,
-          "expr": "sum(increase(maas_user_token_usage_total{token_type=\"input\",user=~\"$user\"}[$__range]))"
+          "expr": "sum(increase(maas_user_token_usage_total{token_type=\"input\",user=~\"$user\",model=~\"$model\"}[$__range]))"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
@@ -43,7 +43,7 @@
         {
           "refId": "A",
           "instant": true,
-          "expr": "sum(increase(maas_user_token_usage_total{token_type=\"cache\",user=~\"$user\"}[$__range]))"
+          "expr": "sum(increase(maas_user_token_usage_total{token_type=\"cache\",user=~\"$user\",model=~\"$model\"}[$__range]))"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
@@ -67,7 +67,7 @@
         {
           "refId": "A",
           "instant": true,
-          "expr": "sum(increase(maas_user_token_usage_total{token_type=\"decoded\",user=~\"$user\"}[$__range]))"
+          "expr": "sum(increase(maas_user_token_usage_total{token_type=\"decoded\",user=~\"$user\",model=~\"$model\"}[$__range]))"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
@@ -91,7 +91,7 @@
         {
           "refId": "A",
           "instant": true,
-          "expr": "sum(increase(maas_user_requests_total{user=~\"$user\"}[$__range]))"
+          "expr": "sum(increase(maas_user_requests_total{user=~\"$user\",model=~\"$model\"}[$__range]))"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
@@ -113,7 +113,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (token_type) (rate(maas_user_token_usage_total{user=~\"$user\"}[5m]))",
+          "expr": "sum by (token_type) (rate(maas_user_token_usage_total{user=~\"$user\",model=~\"$model\"}[5m]))",
           "legendFormat": "{{token_type}}"
         }
       ],
@@ -145,8 +145,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (user) (rate(maas_user_token_usage_total{user=~\"$user\"}[5m]))",
-          "legendFormat": "{{user}}"
+          "expr": "sum by (user, model) (rate(maas_user_token_usage_total{user=~\"$user\",model=~\"$model\"}[5m]))",
+          "legendFormat": "{{user}} / {{model}}"
         }
       ],
       "fieldConfig": {
@@ -171,8 +171,8 @@
     {
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
       "id": 7,
-      "title": "Tokens by user and type",
-      "description": "Increase of maas_user_token_usage_total over the dashboard time range.",
+      "title": "Tokens by user and model",
+      "description": "Increase of maas_user_token_usage_total over the dashboard time range, one row per user, model, and token type.",
       "type": "table",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [
@@ -180,7 +180,7 @@
           "refId": "A",
           "instant": true,
           "format": "table",
-          "expr": "sum by (user, token_type) (increase(maas_user_token_usage_total{user=~\"$user\"}[$__range]))"
+          "expr": "sum by (user, model, token_type) (increase(maas_user_token_usage_total{user=~\"$user\",model=~\"$model\"}[$__range]))"
         }
       ],
       "transformations": [
@@ -188,7 +188,7 @@
           "id": "organize",
           "options": {
             "excludeByName": { "Time": true },
-            "renameByName": { "Value": "Tokens", "user": "User", "token_type": "Token type" }
+            "renameByName": { "Value": "Tokens", "user": "User", "model": "Model", "token_type": "Token type" }
           }
         }
       ],
@@ -218,6 +218,21 @@
         "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
         "definition": "label_values(maas_user_token_usage_total, user)",
         "query": "label_values(maas_user_token_usage_total, user)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "refresh": 2,
+        "sort": 1,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "options": []
+      },
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(maas_user_token_usage_total, model)",
+        "query": "label_values(maas_user_token_usage_total, model)",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",

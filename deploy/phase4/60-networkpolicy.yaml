@@ -19,7 +19,7 @@ spec:
               network.openshift.io/policy-group: ingress
       ports:
         - protocol: TCP
-          port: 8080
+          port: 8443
   egress:
     - ports:
         - protocol: UDP

@@ -38,8 +38,8 @@ def test_metrics_exposition_uses_requested_labels(tmp_path: Path) -> None:
     recorder = Recorder(Checkpoint(tmp_path / "metrics.db"), metrics)
     recorder.record(UsageEvent("evt-2", "alice", "gemma-4", {"input": 5, "cache": 0, "decoded": 2}, "push"))
     body = generate_latest(metrics.registry).decode()
-    assert 'maas_user_token_usage_total{model="gemma-4",token_type="input",user="alice"} 5.0' in body
-    assert 'maas_user_token_usage_total{model="gemma-4",token_type="decoded",user="alice"} 2.0' in body
+    assert 'maas_user_token_usage_total{model="gemma-4",namespace="unknown",token_type="input",user="alice"} 5.0' in body
+    assert 'maas_user_token_usage_total{model="gemma-4",namespace="unknown",token_type="decoded",user="alice"} 2.0' in body
     assert "token_type=\"cache\"" not in body
 
 

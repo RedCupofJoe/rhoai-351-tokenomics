@@ -13,15 +13,16 @@ These are new objects. They are not patches of existing MaaS objects.
 | 1 | Namespace, ServiceAccount `maas-tokenomics-exporter` | `maas-finops` |
 | 1 | Namespace, ServiceAccount `maas-pricing-ui` | `maas-finops-ui` |
 | 1 | ClusterRoleBinding to the existing `cluster-monitoring-view` role | cluster |
+| 1 | ClusterRole `maas-tokenomics-auth-review` and a binding for the pricing UI service account. This allows `create` on `subjectaccessreviews` so the UI can tell a cluster admin from a normal user. It does not grant admin rights. | cluster |
 | 2 | ConfigMap, PVC, Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops` |
 | 3 | ConfigMap `maas-tokenomics-dashboard` | RHOAI monitoring namespace, default `redhat-ods-monitoring` |
 | 3 | `GrafanaDashboard` `maas-tokenomics`, only if that CRD already exists | same |
 | 3 | `PersesDashboard` `dashboard-maas-tokenomics`, only if that CRD already exists | same |
-| 4 | Service CA ConfigMap, PVC, Secret, Deployment, Service, Route, NetworkPolicy | `maas-finops-ui` |
+| 4 | Service CA ConfigMap, PVC, Secrets, Deployment with an `oauth-proxy` sidecar, Service, reencrypt Route, NetworkPolicy | `maas-finops-ui` |
 
 Phase 3 does not modify `dashboard-3-maas-usage-admin` or any other dashboard. If `redhat-ods-monitoring` is absent, phase 3 stops and tells you to set `OBS_NAMESPACE`. It will not create that namespace.
 
-The pricing UI is not registered with the RHOAI dashboard module federation. That registration would change `rhods-dashboard` in `redhat-ods-applications`. This project uses a Route in `maas-finops-ui` instead.
+The pricing UI is not registered with the RHOAI dashboard module federation. That registration would change `rhods-dashboard` in `redhat-ods-applications`. This project uses a Route in `maas-finops-ui` instead. The Route sits behind OpenShift login. A signed-in user sees only their own usage and cannot change prices. An OpenShift AI administrator, a member of `rhods-admins` or `system:cluster-admins`, sees cluster-wide usage and can set per-token rates.
 
 ## 1. Optional: read pod logs
 
