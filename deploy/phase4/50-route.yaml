@@ -1,0 +1,18 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maas-pricing
+  namespace: __UI_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: maas-pricing-ui
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: pricing-ui
+spec:
+  to:
+    kind: Service
+    name: maas-pricing-ui
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

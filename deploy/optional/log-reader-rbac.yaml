@@ -1,0 +1,33 @@
+# Optional. Not applied by deploy.sh unless APPLY_LOG_RBAC=true.
+# Creates a read-only Role in the MaaS namespace. It does not change
+# Deployments, environment, or volume mounts. See MAAS_MODIFICATIONS.md.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: maas-tokenomics-log-reader
+  namespace: __MAAS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: maas-tokenomics-log-reader
+  namespace: __MAAS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: maas-tokenomics-log-reader
+subjects:
+  - kind: ServiceAccount
+    name: maas-tokenomics-exporter
+    namespace: __FINOPS_NAMESPACE__

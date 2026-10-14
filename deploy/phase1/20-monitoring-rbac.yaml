@@ -1,0 +1,17 @@
+# Lets the pricing UI query Thanos/Prometheus. This does not grant access
+# to MaaS workloads. cluster-monitoring-view is the supported OpenShift role
+# for reading metrics through thanos-querier.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: __UI_NAMESPACE__-monitoring-view
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: maas-pricing-ui
+    namespace: __UI_NAMESPACE__

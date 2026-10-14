@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: maas-tokenomics-exporter
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: exporter
+data:
+  POLL_INTERVAL_SECONDS: "30"
+  CACHE_INCLUDED_IN_PROMPT: "true"
+  MAX_EVENTS_PER_POLL: "200"
+  HTTP_TIMEOUT_SECONDS: "15"
+  # Leave these empty to keep the exporter idle. It still serves /metrics
+  # and accepts authenticated posts on /v1/usage.
+  MLFLOW_TRACKING_URI: ""
+  MLFLOW_EXPERIMENT_IDS: ""
+  LITELLM_BASE_URL: ""
+  ENABLE_POD_LOGS: "false"
+  POD_LOG_NAMESPACES: ""
+  POD_LOG_LABEL_SELECTOR: ""
+  POD_LOG_CONTAINER: ""

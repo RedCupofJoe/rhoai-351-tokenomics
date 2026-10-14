@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: maas-tokenomics-exporter
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: maas-tokenomics-exporter
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    app.kubernetes.io/name: maas-tokenomics-exporter
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: http

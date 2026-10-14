@@ -1,0 +1,16 @@
+{
+  "id": "chatcmpl-example",
+  "model": "gemma-4",
+  "prompt_tokens": 100,
+  "completion_tokens": 20,
+  "total_tokens": 120,
+  "metadata": {
+    "user_api_key_user_id": "alice",
+    "usage_object": {
+      "prompt_tokens": 100,
+      "completion_tokens": 20,
+      "total_tokens": 120,
+      "prompt_tokens_details": { "cached_tokens": 40 }
+    }
+  }
+}

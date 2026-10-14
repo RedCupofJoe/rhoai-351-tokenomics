@@ -1,0 +1,35 @@
+{
+  "trace_id": "tr-example",
+  "timestamp_ms": 1710000000000,
+  "tags": { "mlflow.user": "alice" },
+  "spans": [
+    {
+      "span_id": "root",
+      "name": "fulfill_order",
+      "attributes": {
+        "mlflow.chat.tokenUsage": {
+          "input_tokens": 100,
+          "output_tokens": 20,
+          "total_tokens": 120,
+          "cache_read_input_tokens": 40
+        },
+        "mlflow.llm.model": "gemma-4",
+        "mlflow.llm.provider": "openai"
+      }
+    },
+    {
+      "span_id": "child",
+      "parent_span_id": "root",
+      "name": "chat",
+      "attributes": {
+        "mlflow.chat.tokenUsage": {
+          "input_tokens": 100,
+          "output_tokens": 20,
+          "total_tokens": 120,
+          "cache_read_input_tokens": 40
+        },
+        "mlflow.llm.model": "gemma-4"
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: maas-pricing-ui
+  namespace: __UI_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: maas-pricing-ui
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 9091
+        - protocol: TCP
+          port: 9092

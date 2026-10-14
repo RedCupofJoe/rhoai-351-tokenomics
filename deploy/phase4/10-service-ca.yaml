@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openshift-service-ca
+  namespace: __UI_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: pricing-ui
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"

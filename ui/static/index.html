@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MaaS Tokenomics Pricing</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">RHOAI 3.5.1 MaaS showback</p>
+      <h1>Tokenomics pricing</h1>
+    </div>
+    <p id="session" class="session"></p>
+  </header>
+
+  <main>
+    <section id="login" class="card">
+      <h2>Sign in</h2>
+      <p>Use the admin token from the <code>maas-pricing-admin</code> secret. The token stays in this browser tab.</p>
+      <form id="login-form">
+        <label for="token">Admin token</label>
+        <input id="token" name="token" type="password" autocomplete="current-password" required>
+        <button type="submit">Continue</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="app" class="hidden">
+      <section class="card">
+        <div class="row">
+          <h2>Usage window</h2>
+          <div class="spans" role="group" aria-label="Time span">
+            <button type="button" data-span="1h">1h</button>
+            <button type="button" data-span="24h" class="active">24h</button>
+            <button type="button" data-span="7d">7d</button>
+            <button type="button" data-span="30d">30d</button>
+          </div>
+        </div>
+        <p class="hint">Costs use reset-aware deltas of <code>maas_user_token_usage_total</code> between Prometheus scrapes in the selected span.</p>
+      </section>
+
+      <section class="card">
+        <h2>Cost per token</h2>
+        <form id="pricing-form">
+          <div class="rates">
+            <fieldset>
+              <legend>Input</legend>
+              <label for="input-token">Per token</label>
+              <input id="input-token" type="number" min="0" step="any" required>
+              <label for="input-million">Per 1M tokens</label>
+              <input id="input-million" type="number" min="0" step="any" required>
+            </fieldset>
+            <fieldset>
+              <legend>Cache</legend>
+              <label for="cache-token">Per token</label>
+              <input id="cache-token" type="number" min="0" step="any" required>
+              <label for="cache-million">Per 1M tokens</label>
+              <input id="cache-million" type="number" min="0" step="any" required>
+            </fieldset>
+            <fieldset>
+              <legend>Decoded</legend>
+              <label for="decoded-token">Per token</label>
+              <input id="decoded-token" type="number" min="0" step="any" required>
+              <label for="decoded-million">Per 1M tokens</label>
+              <input id="decoded-million" type="number" min="0" step="any" required>
+            </fieldset>
+          </div>
+          <div class="row">
+            <label for="currency">Currency</label>
+            <input id="currency" maxlength="3" value="USD" required>
+            <button type="submit">Save prices</button>
+            <p id="pricing-status" class="hint"></p>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <h2>Showback</h2>
+          <p id="report-meta" class="hint"></p>
+        </div>
+        <p id="report-error" class="error" role="alert"></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Models</th>
+                <th class="num">Input tokens</th>
+                <th class="num">Cache tokens</th>
+                <th class="num">Decoded tokens</th>
+                <th class="num">Input cost</th>
+                <th class="num">Cache cost</th>
+                <th class="num">Decoded cost</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+            <tfoot>
+              <tr id="totals"></tr>
+            </tfoot>
+          </table>
+        </div>
+        <p id="empty" class="hint hidden">No token usage in this span. The exporter counts events it has observed since its checkpoint started.</p>
+      </section>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

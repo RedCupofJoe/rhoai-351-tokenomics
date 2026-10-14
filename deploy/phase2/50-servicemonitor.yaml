@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: maas-tokenomics-exporter
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: maas-tokenomics-exporter
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: maas-tokenomics-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scheme: http

@@ -1,0 +1,279 @@
+# New Perses dashboard. This is an additional object. It does not modify
+# dashboard-3-maas-usage-admin or any other existing dashboard.
+apiVersion: perses.dev/v1alpha1
+kind: PersesDashboard
+metadata:
+  name: dashboard-maas-tokenomics
+  namespace: __OBS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: dashboard
+spec:
+  display:
+    name: Tokenomics
+    description: >
+      Input, cache, and decoded tokens per user. Decoded tokens are
+      completion tokens. The Observability time picker drives these panels.
+      Use 1h, 24h, 7d, and 30d.
+  duration: 24h
+  variables:
+    - kind: ListVariable
+      spec:
+        allowAllValue: true
+        allowMultiple: true
+        defaultValue: $__all
+        display:
+          name: User
+        name: user
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+              name: __PERSES_DATASOURCE__
+            labelName: user
+            matchers:
+              - maas_user_token_usage_total{user!=""}
+  layouts:
+    - kind: Grid
+      spec:
+        display:
+          collapse:
+            open: true
+          title: Token usage
+        items:
+          - content:
+              $ref: "#/spec/panels/inputTokens"
+            height: 5
+            width: 6
+            x: 0
+            "y": 0
+          - content:
+              $ref: "#/spec/panels/cacheTokens"
+            height: 5
+            width: 6
+            x: 6
+            "y": 0
+          - content:
+              $ref: "#/spec/panels/decodedTokens"
+            height: 5
+            width: 6
+            x: 12
+            "y": 0
+          - content:
+              $ref: "#/spec/panels/totalTokens"
+            height: 5
+            width: 6
+            x: 18
+            "y": 0
+          - content:
+              $ref: "#/spec/panels/tokenRate"
+            height: 9
+            width: 24
+            x: 0
+            "y": 5
+          - content:
+              $ref: "#/spec/panels/byUser"
+            height: 9
+            width: 24
+            x: 0
+            "y": 14
+  panels:
+    inputTokens:
+      kind: Panel
+      spec:
+        display:
+          name: Input tokens
+          description: Uncached prompt tokens over the selected time span.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last
+            format:
+              unit: decimal
+              decimalPlaces: 0
+              shortValues: true
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum(increase(maas_user_token_usage_total{token_type="input",user=~"$user"}[$__range])) or vector(0)'
+    cacheTokens:
+      kind: Panel
+      spec:
+        display:
+          name: Cache tokens
+          description: Prompt-cache tokens over the selected time span.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last
+            format:
+              unit: decimal
+              decimalPlaces: 0
+              shortValues: true
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum(increase(maas_user_token_usage_total{token_type="cache",user=~"$user"}[$__range])) or vector(0)'
+    decodedTokens:
+      kind: Panel
+      spec:
+        display:
+          name: Decoded tokens
+          description: Completion / output tokens over the selected time span.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last
+            format:
+              unit: decimal
+              decimalPlaces: 0
+              shortValues: true
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum(increase(maas_user_token_usage_total{token_type="decoded",user=~"$user"}[$__range])) or vector(0)'
+    totalTokens:
+      kind: Panel
+      spec:
+        display:
+          name: Total tokens
+          description: Input plus cache plus decoded tokens.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last
+            format:
+              unit: decimal
+              decimalPlaces: 0
+              shortValues: true
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum(increase(maas_user_token_usage_total{user=~"$user"}[$__range])) or vector(0)'
+    tokenRate:
+      kind: Panel
+      spec:
+        display:
+          name: Token rate by type
+          description: Per-second rate of input, cache, and decoded tokens.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: table
+            visual:
+              display: line
+              lineWidth: 2
+              areaOpacity: 0.2
+              stack: all
+            yAxis:
+              min: 0
+            format:
+              unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum by (token_type) (rate(maas_user_token_usage_total{user=~"$user"}[5m]))'
+    byUser:
+      kind: Panel
+      spec:
+        display:
+          name: Tokens by user
+          description: Input, cache, and decoded totals for the selected time span.
+        plugin:
+          kind: Table
+          spec:
+            density: compact
+            pagination: true
+            columnSettings:
+              - name: timestamp
+                hide: true
+              - name: user
+                header: User
+                align: left
+                enableSorting: true
+              - name: "value #1"
+                header: Input
+                align: right
+                enableSorting: true
+                sort: desc
+                format:
+                  unit: decimal
+                  decimalPlaces: 0
+              - name: "value #2"
+                header: Cache
+                align: right
+                enableSorting: true
+                format:
+                  unit: decimal
+                  decimalPlaces: 0
+              - name: "value #3"
+                header: Decoded
+                align: right
+                enableSorting: true
+                format:
+                  unit: decimal
+                  decimalPlaces: 0
+            transforms:
+              - kind: MergeSeries
+                spec: {}
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum by (user) (increase(maas_user_token_usage_total{token_type="input",user=~"$user"}[$__range]))'
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum by (user) (increase(maas_user_token_usage_total{token_type="cache",user=~"$user"}[$__range]))'
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  datasource:
+                    kind: PrometheusDatasource
+                    name: __PERSES_DATASOURCE__
+                  query: 'sum by (user) (increase(maas_user_token_usage_total{token_type="decoded",user=~"$user"}[$__range]))'

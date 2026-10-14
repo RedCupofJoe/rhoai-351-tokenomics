@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maas-pricing-ui
+  namespace: __UI_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: maas-pricing-ui
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: pricing-ui
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: maas-pricing-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: maas-pricing-ui
+        app.kubernetes.io/part-of: rhoai-tokenomics
+        app.kubernetes.io/component: pricing-ui
+    spec:
+      serviceAccountName: maas-pricing-ui
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ui
+          image: __UI_IMAGE__
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: LISTEN_PORT
+              value: "8080"
+            - name: PRICING_PATH
+              value: /data/pricing.json
+            - name: ADMIN_TOKEN_FILE
+              value: /etc/pricing-admin/token
+            - name: PROMETHEUS_URL
+              value: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+            - name: PROMETHEUS_TOKEN_FILE
+              value: /var/run/secrets/kubernetes.io/serviceaccount/token
+            - name: PROMETHEUS_CA_FILE
+              value: /etc/service-ca/service-ca.crt
+            - name: PROMETHEUS_TLS_INSECURE
+              value: "false"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: admin
+              mountPath: /etc/pricing-admin
+              readOnly: true
+            - name: service-ca
+              mountPath: /etc/service-ca
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: maas-pricing-data
+        - name: tmp
+          emptyDir: {}
+        - name: admin
+          secret:
+            secretName: maas-pricing-admin
+        - name: service-ca
+          configMap:
+            name: openshift-service-ca

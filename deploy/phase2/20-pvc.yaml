@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maas-tokenomics-checkpoint
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: exporter
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

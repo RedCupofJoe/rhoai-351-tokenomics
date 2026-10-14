@@ -1,0 +1,97 @@
+:root {
+  color-scheme: light;
+  --ink: #1b1b1b;
+  --muted: #4d4d4d;
+  --line: #d8d8d8;
+  --card: #ffffff;
+  --bg: #f4f4f4;
+  --accent: #0f62fe;
+  --accent-ink: #ffffff;
+  --danger: #a2191f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  background: #161616;
+  color: #f4f4f4;
+}
+
+.topbar h1 { margin: 0; font-size: 1.6rem; font-weight: 600; }
+.eyebrow { margin: 0 0 4px; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.75rem; color: #c6c6c6; }
+.session { margin: 0; align-self: end; color: #c6c6c6; }
+
+main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px 18px 18px;
+  margin-bottom: 16px;
+}
+
+h2 { margin: 0; font-size: 1.1rem; }
+
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.hint { color: var(--muted); margin: 8px 0 0; }
+.error { color: var(--danger); min-height: 1.2em; }
+.hidden { display: none; }
+
+label { display: block; font-size: 0.85rem; margin-bottom: 4px; }
+input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #8d8d8d;
+  border-radius: 4px;
+  font: inherit;
+}
+
+button {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.active { outline: 2px solid #161616; }
+.spans button { background: #e0e0e0; color: var(--ink); }
+.spans button.active { background: var(--accent); color: white; }
+
+.rates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0; }
+legend { padding: 0 6px; font-weight: 600; }
+
+#currency { width: 5rem; }
+#pricing-form .row { margin-top: 8px; }
+
+.table-wrap { overflow-x: auto; margin-top: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tfoot td { font-weight: 600; }
+
+@media (max-width: 800px) {
+  .rates { grid-template-columns: 1fr; }
+  .topbar { flex-direction: column; }
+}
