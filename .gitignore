@@ -6,6 +6,6 @@ __pycache__/
 *.db-journal
 .DS_Store
 dist/
-build/
+/build/
 .coverage
 htmlcov/

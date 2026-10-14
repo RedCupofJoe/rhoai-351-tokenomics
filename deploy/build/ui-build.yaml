@@ -1,0 +1,30 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: maas-tokenomics-ui
+  namespace: __UI_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: maas-tokenomics-ui
+  namespace: __UI_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+spec:
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: ui/Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: maas-tokenomics-ui:0.1.0
+  triggers: []
