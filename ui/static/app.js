@@ -169,6 +169,7 @@ function renderReport(report) {
   reportError.textContent = "";
   const scope = report.scope === "self" ? "your usage" : "cluster";
   reportMeta.textContent = report.currency + " · " + report.span + " · " + scope;
+  if (report.attribution === "model") reportMeta.textContent += " · model totals";
   empty.classList.toggle("hidden", shown.length > 0);
   empty.textContent = report.scope === "self"
     ? "No token usage for your OpenShift user in this span. Usage is matched to your username."

@@ -1,12 +1,18 @@
 # Merge patch for DSCInitialization. Applied with oc patch --type merge.
-# This sets the metrics store the built-in MaaS observability dashboard reads.
+# Metrics, alerting, and traces match the OpenShift AI monitoring stack.
 # It does not change DataScienceCluster component states.
 spec:
   monitoring:
     managementState: Managed
     namespace: __OBS_NAMESPACE__
+    alerting: {}
     metrics:
       replicas: 1
       storage:
         size: 5Gi
         retention: 90d
+    traces:
+      sampleRatio: "0.1"
+      storage:
+        backend: pv
+        retention: 2160h

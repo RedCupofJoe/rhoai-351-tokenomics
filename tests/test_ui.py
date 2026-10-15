@@ -177,6 +177,53 @@ def test_bad_bearer_does_not_fall_through_to_the_user_header(tmp_path: Path) -> 
     assert response.status_code == 401
 
 
+def test_empty_exporter_series_fall_back_to_model_counters(tmp_path: Path) -> None:
+    def query(promql: str, start: float, end: float, _step: int) -> list[dict]:
+        if promql == "maas_user_token_usage_total":
+            return []
+        if 'source="local_compute"' in promql:
+            return [
+                {
+                    "metric": {"model_name": "gemma-2-9b-it", "namespace": "llm", "source": "local_compute"},
+                    "values": [[start, "0"], [end, "273"]],
+                },
+                {
+                    "metric": {"model_name": "granite-4-tiny-gpu", "namespace": "llm", "source": "local_compute"},
+                    "values": [[start, "0"], [end, "0"]],
+                },
+            ]
+        if "local_cache_hit" in promql:
+            return [
+                {
+                    "metric": {"model_name": "gemma-2-9b-it", "namespace": "llm", "source": "local_cache_hit"},
+                    "values": [[start, "0"], [end, "40"]],
+                }
+            ]
+        if promql.startswith("kserve_vllm:generation_tokens_total"):
+            return [
+                {
+                    "metric": {"model_name": "gemma-2-9b-it", "namespace": "llm"},
+                    "values": [[start, "0"], [end, "12"]],
+                }
+            ]
+        raise AssertionError(promql)
+
+    store = PricingStore(tmp_path / "pricing.json")
+    store.save({"currency": "USD", "rates": {"input": 0.000003, "cache": 0.0000003, "decoded": 0.000015}})
+    client = TestClient(create_app(store, query, admin_token="admin-token", demo=False))
+    report = client.get("/api/showback?span=24h", headers={"Authorization": "Bearer admin-token"})
+    assert report.status_code == 200
+    body = report.json()
+    assert body["attribution"] == "model"
+    assert [row["model"] for row in body["users"]] == ["gemma-2-9b-it"]
+    assert body["users"][0]["user"] == "all-callers"
+    assert body["users"][0]["namespace"] == "llm"
+    assert body["users"][0]["tokens"] == {"input": 273, "cache": 40, "decoded": 12}
+    personal = client.get("/api/showback?span=24h", headers={"X-Forwarded-User": "alice"})
+    assert personal.status_code == 200
+    assert personal.json()["users"] == []
+
+
 def test_negative_price_is_rejected(tmp_path: Path) -> None:
     client = _client(tmp_path)
     response = client.put(

@@ -15,9 +15,10 @@ These are new objects. They are not patches of existing MaaS objects.
 | 1 | ClusterRole `maas-tokenomics-auth-review` and a binding for the pricing UI service account. This allows `create` on `subjectaccessreviews` so the UI can tell a cluster admin from a normal user. It does not grant admin rights. | cluster |
 | 2 | ConfigMap, PVC, standalone Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops-ui` |
 | 3 | Subscriptions `cluster-observability-operator`, `opentelemetry-product`, and `tempo-product` (Red Hat operators, channel `stable`) | `openshift-operators` |
-| 3 | Merge patch: `DSCInitialization` `spec.monitoring.metrics` storage `5Gi`, retention `90d`, replicas `1` | cluster |
+| 3 | Merge patch: `DSCInitialization` `spec.monitoring` metrics (5Gi, 90d, 1 replica), `alerting: {}`, and Tempo traces (`pv`, 2160h, sample ratio 0.1) | cluster |
 | 3 | Merge patch: `OdhDashboardConfig` `spec.dashboardConfig.observabilityDashboard: true` | `redhat-ods-applications` |
 | 3 | Merge patch: `Dashboard` `spec.observability.enabled: true` and Perses service `data-science-perses` | cluster |
+| 3 | Raise `data-science-prometheus-cluster-proxy` to 100m CPU and 128Mi memory so it can finish starting | `redhat-ods-monitoring` |
 | 3 | Subscription `grafana-operator` (Community Operators, channel `v5`) | `openshift-operators` |
 | 3 | ServiceAccount `maas-tokenomics-grafana`, its token Secret, and a ClusterRoleBinding to `cluster-monitoring-view` | `maas-finops-ui` and cluster |
 | 3 | Grafana `maas-tokenomics`, GrafanaDatasource `thanos`, GrafanaDashboard `maas-tokenomics`, dashboard ConfigMap | `maas-finops-ui` |
@@ -88,16 +89,26 @@ Not a change to MaaS if tracing is already being stored. Set `MLFLOW_TRACKING_UR
 
 Enabling MLflow tracing on a gateway or model pod that does not already emit traces would be a change to that pod. This repository does not ship that patch. Traces need `mlflow.chat.tokenUsage` plus a user attribute (`mlflow.trace.user` or the `mlflow.user` tag) or the series is labeled `user="unknown"`.
 
-## 4. What this project will not change for you
+## 4. vLLM usage flags
 
-- No sidecar is added to MaaS, gateway, or model pods.
-- No `DataScienceCluster` component management state is changed. Phase 3 does set `DSCInitialization` `spec.monitoring.metrics` so the built-in MaaS observability dashboard has a metrics store. It does not set metrics exporters.
+Not applied by `deploy.sh`. Run this when the model servers should return token usage, including cache details, on every completion:
+
+```bash
+LLM_NAMESPACE=llm ./scripts/enable-vllm-usage-flags.sh
+```
+
+The script adds `--enable-force-include-usage` and `--enable-prompt-tokens-details` to each `LLMInferenceService` container named `main`. It scales that model to zero, updates the template, and scales it back, so the rollout does not request a second GPU. The model is unavailable while its pod starts.
+
+## 5. What this project will not change for you
+
+- No sidecar is added to MaaS, gateway, or model pods. The vLLM usage-flag script above is the only change to a model template, and only when you run it.
+- No `DataScienceCluster` component management state is changed. Phase 3 sets `DSCInitialization` `spec.monitoring` for metrics, alerting, and traces. It does not set external metrics exporters.
 - No OpenTelemetry Collector config is rewritten.
 - No Limitador `TokenRateLimitPolicy` or TelemetryPolicy is edited. `authorized_hits` stays the combined gateway total.
 - User-workload monitoring is required for the ServiceMonitor and is not enabled by `deploy.sh`. A cluster administrator turns it on with `./scripts/enable-user-workload-monitoring.sh`. That edits `cluster-monitoring-config` in `openshift-monitoring`.
 - `deploy/optional/cluster-log-forwarder.yaml` is not applied by `deploy.sh`. It is an optional ClusterLogForwarder that posts MaaS application logs to the exporter. It does not change a MaaS pod.
 
-## 5. If the Observability tab has no Tokenomics series
+## 6. If the Observability tab has no Tokenomics series
 
 The ServiceMonitor sends metrics to user-workload Prometheus. The RHOAI Perses datasource `data-science-prometheus-datasource` sometimes queries only the OpenShift AI metric store. Confirm which store has the series before changing either Prometheus:
 

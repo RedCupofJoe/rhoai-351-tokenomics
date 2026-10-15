@@ -144,6 +144,23 @@ ensure_cluster_observability() {
   exit 1
 }
 
+fix_cluster_prometheus_proxy() {
+  # The operator starts this proxy at 20m CPU and 40Mi memory. It never binds
+  # before the liveness probe restarts it. Match the namespace proxy budget.
+  local i
+  for i in $(seq 1 30); do
+    if oc -n "${OBS_NAMESPACE}" get deploy data-science-prometheus-cluster-proxy >/dev/null 2>&1; then
+      oc -n "${OBS_NAMESPACE}" patch deploy data-science-prometheus-cluster-proxy --type json -p '[
+        {"op":"replace","path":"/spec/template/spec/containers/0/resources","value":{"requests":{"cpu":"50m","memory":"64Mi"},"limits":{"cpu":"100m","memory":"128Mi"}}}
+      ]'
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Deployment ${OBS_NAMESPACE}/data-science-prometheus-cluster-proxy was not created." >&2
+  exit 1
+}
+
 enable_maas_observability() {
   ensure_cluster_observability
   merge_patch "dscinitialization/${DSCI_NAME}" "${ROOT}/deploy/phase3/dsci-monitoring-patch.yaml"
@@ -153,6 +170,7 @@ enable_maas_observability() {
   for i in $(seq 1 90); do
     if oc -n "${OBS_NAMESPACE}" get service data-science-perses >/dev/null 2>&1; then
       merge_patch "dashboard/${DASHBOARD_NAME}" "${ROOT}/deploy/phase3/dashboard-observability-patch.yaml"
+      fix_cluster_prometheus_proxy
       echo "MaaS observability dashboard proxy is enabled."
       return 0
     fi

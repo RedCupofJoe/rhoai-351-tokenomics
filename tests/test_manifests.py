@@ -89,9 +89,12 @@ def test_grafana_operator_resources_select_the_same_instance() -> None:
     assert dashboard_patch["spec"]["observability"]["persesService"]["namespace"] == "redhat-ods-monitoring"
     dsci_patch = next(yaml.safe_load_all(render((ROOT / "deploy/phase3/dsci-monitoring-patch.yaml").read_text(encoding="utf-8"))))
     assert dsci_patch["spec"]["monitoring"]["metrics"]["storage"]["size"] == "5Gi"
+    assert dsci_patch["spec"]["monitoring"]["alerting"] == {}
+    assert dsci_patch["spec"]["monitoring"]["traces"]["storage"]["backend"] == "pv"
     assert "deploy/phase3/opentelemetry-subscription.yaml" in script
     assert "deploy/phase3/tempo-subscription.yaml" in script
     assert "deploy/phase3/dashboard-observability-patch.yaml" in script
+    assert "data-science-prometheus-cluster-proxy" in script
     assert "observabilityDashboard" in (ROOT / "deploy/phase3/odh-observability-dashboard-patch.yaml").read_text(encoding="utf-8")
 
 
@@ -161,6 +164,19 @@ def test_servicemonitor_matches_exporter_service() -> None:
     assert monitor["spec"]["namespaceSelector"]["matchNames"] == [service["metadata"]["namespace"]]
     assert monitor["spec"]["endpoints"][0]["port"] == "metrics"
     assert any(port["name"] == "metrics" for port in service["spec"]["ports"])
+
+
+def test_vllm_usage_flag_script_sets_both_flags() -> None:
+    script = (ROOT / "scripts/enable-vllm-usage-flags.sh").read_text(encoding="utf-8")
+    assert "--enable-force-include-usage" in script
+    assert "--enable-prompt-tokens-details" in script
+    assert "enable-vllm-usage-flags.sh" not in (ROOT / "deploy.sh").read_text(encoding="utf-8")
+
+
+def test_pricing_ui_can_reach_apiserver() -> None:
+    policy = next(yaml.safe_load_all(render((ROOT / "deploy/phase4/60-networkpolicy.yaml").read_text(encoding="utf-8"))))
+    ports = {port["port"] for rule in policy["spec"]["egress"] for port in rule["ports"]}
+    assert 6443 in ports
 
 
 def test_ui_serviceaccount_can_view_thanos() -> None:

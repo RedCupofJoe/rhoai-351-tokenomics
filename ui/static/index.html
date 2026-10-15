@@ -38,7 +38,7 @@
             <button type="button" data-span="30d">30d</button>
           </div>
         </div>
-        <p class="hint">Costs use reset-aware deltas of <code>maas_user_token_usage_total</code> between Prometheus scrapes in the selected span.</p>
+        <p class="hint">Costs use reset-aware deltas of token counters in the selected span. Per-user rows come from the exporter. When that series is empty, the page shows model-server totals for every caller.</p>
       </section>
 
       <section class="card">

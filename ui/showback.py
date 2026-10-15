@@ -18,6 +18,17 @@ STEPS: dict[str, int] = {
     "30d": 1800,
 }
 
+# vLLM publishes prompt, cache, and generation counters per model pod.
+# Cache hits are a subset of the prompt total, so input is the computed remainder.
+MODEL_COUNTER_QUERIES: tuple[tuple[str, str], ...] = (
+    ('kserve_vllm:prompt_tokens_by_source_total{source="local_compute"}', "input"),
+    (
+        'kserve_vllm:prompt_tokens_by_source_total{source=~"local_cache_hit|external_kv_transfer"}',
+        "cache",
+    ),
+    ("kserve_vllm:generation_tokens_total", "decoded"),
+)
+
 
 def counter_increase(values: list[float]) -> float:
     """Reset-aware increase between scrape samples.
@@ -88,6 +99,47 @@ def aggregate_series(series: list[dict], rates_per_token: dict[str, float], curr
         "models": sorted({row["model"] for row in rows}),
         "totals": {"tokens": totals, "costs": total_costs},
     }
+
+
+def series_from_model_counter(item: dict, token_type: str) -> dict:
+    """Reshape one vLLM counter series into the showback metric labels."""
+    metric = item.get("metric") or {}
+    model = label_from_metric(metric, "model_name", "model")
+    namespace = label_from_metric(metric, "namespace")
+    user = label_from_metric(metric, "user", "username", default="all-callers")
+    return {
+        "metric": {
+            "user": user,
+            "namespace": namespace,
+            "token_type": token_type,
+            "model": model,
+            "__name__": "maas_user_token_usage_total",
+        },
+        "values": item.get("values") or [],
+    }
+
+
+def label_from_metric(metric: dict, *keys: str, default: str = "unknown") -> str:
+    for key in keys:
+        value = metric.get(key)
+        if value:
+            return str(value)
+    return default
+
+
+def drop_empty_rows(report: dict) -> dict:
+    """Remove models whose counters did not move in the span."""
+    rows = [row for row in report["users"] if any(int(row["tokens"][kind]) for kind in TOKEN_TYPES)]
+    totals = {kind: 0 for kind in TOKEN_TYPES}
+    for row in rows:
+        for kind in TOKEN_TYPES:
+            totals[kind] += int(row["tokens"][kind])
+    scoped = dict(report)
+    scoped["users"] = rows
+    scoped["projects"] = sorted({row["namespace"] for row in rows})
+    scoped["models"] = sorted({row["model"] for row in rows})
+    scoped["totals"] = {"tokens": totals, "costs": cost_from_totals(totals, report["rates_per_token"])}
+    return scoped
 
 
 def scope_report(report: dict, viewer: str, admin: bool) -> dict:

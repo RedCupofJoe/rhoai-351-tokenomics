@@ -16,7 +16,15 @@ from tokenomics.cost import TOKEN_TYPES, per_million_to_per_token, per_token_to_
 from .auth import DEFAULT_ADMIN_GROUPS, KubernetesAdminReview, principal_from_request
 from .pricing_store import PricingStore
 from .prometheus_query import PrometheusError
-from .showback import SPANS, STEPS, aggregate_series, scope_report
+from .showback import (
+    MODEL_COUNTER_QUERIES,
+    SPANS,
+    STEPS,
+    aggregate_series,
+    drop_empty_rows,
+    scope_report,
+    series_from_model_counter,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 QUERY = "maas_user_token_usage_total"
@@ -100,9 +108,19 @@ def create_app(
         start = end - SPANS[span]
         try:
             series = query_series(QUERY, start, end, STEPS[span])
+            attribution = "exporter"
+            if not series:
+                attribution = "model"
+                series = []
+                for promql, token_type in MODEL_COUNTER_QUERIES:
+                    for item in query_series(promql, start, end, STEPS[span]):
+                        series.append(series_from_model_counter(item, token_type))
         except PrometheusError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         report = aggregate_series(series, pricing["rates"], pricing["currency"], span)
+        report["attribution"] = attribution
+        if attribution == "model":
+            report = drop_empty_rows(report)
         report = scope_report(report, principal.name, principal.admin)
         report["demo"] = demo
         return report

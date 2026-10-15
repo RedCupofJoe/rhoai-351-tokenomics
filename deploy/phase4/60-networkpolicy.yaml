@@ -32,6 +32,9 @@ spec:
           port: 5353
         - protocol: TCP
           port: 443
+        # API service port 443 is DNAT'd to the apiserver on 6443.
+        - protocol: TCP
+          port: 6443
         - protocol: TCP
           port: 8443
         - protocol: TCP
