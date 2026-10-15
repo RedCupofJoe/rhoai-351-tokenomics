@@ -1,0 +1,35 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: thanos
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: grafana
+spec:
+  uid: prometheus
+  resyncPeriod: 5m
+  instanceSelector:
+    matchLabels:
+      dashboards: __GRAFANA_LABEL__
+  datasource:
+    name: Prometheus
+    type: prometheus
+    access: proxy
+    isDefault: true
+    url: https://thanos-querier.openshift-monitoring.svc.cluster.local:9091
+    jsonData:
+      timeInterval: 30s
+      tlsAuthWithCACert: true
+      httpHeaderName1: Authorization
+  valuesFrom:
+    - targetPath: secureJsonData.httpHeaderValue1
+      valueFrom:
+        secretKeyRef:
+          name: maas-tokenomics-grafana-bearer
+          key: authorization
+    - targetPath: secureJsonData.tlsCACert
+      valueFrom:
+        configMapKeyRef:
+          name: openshift-service-ca
+          key: service-ca.crt

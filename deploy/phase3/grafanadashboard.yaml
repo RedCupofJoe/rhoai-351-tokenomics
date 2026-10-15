@@ -2,7 +2,7 @@ apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDashboard
 metadata:
   name: maas-tokenomics
-  namespace: __OBS_NAMESPACE__
+  namespace: __FINOPS_NAMESPACE__
   labels:
     app.kubernetes.io/part-of: rhoai-tokenomics
     app.kubernetes.io/component: dashboard

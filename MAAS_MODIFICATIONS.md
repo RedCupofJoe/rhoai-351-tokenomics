@@ -14,9 +14,12 @@ These are new objects. They are not patches of existing MaaS objects.
 | 1 | ClusterRoleBinding to the existing `cluster-monitoring-view` role | cluster |
 | 1 | ClusterRole `maas-tokenomics-auth-review` and a binding for the pricing UI service account. This allows `create` on `subjectaccessreviews` so the UI can tell a cluster admin from a normal user. It does not grant admin rights. | cluster |
 | 2 | ConfigMap, PVC, standalone Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops-ui` |
+| 3 | Subscription `grafana-operator` (Community Operators, channel `v5`) | `openshift-operators` |
+| 3 | ServiceAccount `maas-tokenomics-grafana`, its token Secret, and a ClusterRoleBinding to `cluster-monitoring-view` | `maas-finops-ui` and cluster |
+| 3 | Grafana `maas-tokenomics`, GrafanaDatasource `thanos`, GrafanaDashboard `maas-tokenomics`, dashboard ConfigMap | `maas-finops-ui` |
+| 3 | ConfigMap `maas-tokenomics-dashboard` labeled `console.openshift.io/dashboard=true` and `console.openshift.io/odc-dashboard=true` | `openshift-config-managed` (OpenShift console dashboard menus) |
 | 3 | ConfigMap `maas-tokenomics-dashboard` | RHOAI monitoring namespace, default `redhat-ods-monitoring` |
-| 3 | `GrafanaDashboard` `maas-tokenomics`, only if that CRD already exists | same |
-| 3 | `PersesDashboard` `dashboard-maas-tokenomics`, only if that CRD already exists | same |
+| 3 | `PersesDashboard` `dashboard-maas-tokenomics`, when that CRD already exists | same |
 | 4 | Service CA ConfigMap, PVC, Secrets, Deployment with an `oauth-proxy` sidecar, Service, reencrypt Route, NetworkPolicy | `maas-finops-ui` |
 
 Phase 3 does not modify `dashboard-3-maas-usage-admin` or any other dashboard. If `redhat-ods-monitoring` is absent, phase 3 stops and tells you to set `OBS_NAMESPACE`. It will not create that namespace.

@@ -1,0 +1,23 @@
+FROM registry.access.redhat.com/ubi9/ubi
+
+ARG GRAFANA_VERSION=13.0.1
+
+USER 0
+RUN dnf install -y tar gzip shadow-utils ca-certificates curl \
+    && curl -fsSL -o /tmp/grafana.tar.gz "https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz" \
+    && mkdir -p /usr/share/grafana /var/lib/grafana /var/log/grafana /etc/grafana/provisioning \
+    && tar -xzf /tmp/grafana.tar.gz -C /usr/share/grafana --strip-components=1 \
+    && rm -f /tmp/grafana.tar.gz \
+    && groupadd --system --gid 472 grafana \
+    && useradd --system --uid 472 --gid 472 --home-dir /usr/share/grafana --shell /sbin/nologin grafana \
+    && touch /etc/grafana/grafana.ini \
+    && chown -R 472:0 /usr/share/grafana /var/lib/grafana /var/log/grafana /etc/grafana \
+    && chmod -R g=u /usr/share/grafana /var/lib/grafana /var/log/grafana /etc/grafana \
+    && dnf clean all
+
+COPY grafana/run.sh /run.sh
+RUN chmod 0755 /run.sh
+
+USER 472
+EXPOSE 3000
+ENTRYPOINT ["/run.sh"]

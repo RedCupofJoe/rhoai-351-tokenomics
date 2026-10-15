@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app: open-webui
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: open-webui
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: open-webui-tls
+spec:
+  selector:
+    app: open-webui
+  ports:
+    - name: https
+      port: 443
+      targetPort: https

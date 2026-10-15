@@ -1,0 +1,55 @@
+# The agent image is supplied by CARAVAN_AGENT_IMAGE. This repository does not
+# contain that application's source, so it is not rebuilt from a Containerfile.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caravan-agent
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app: caravan-agent
+    app.kubernetes.io/name: caravan-agent
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: caravan-agent
+  template:
+    metadata:
+      labels:
+        app: caravan-agent
+        app.kubernetes.io/name: caravan-agent
+        app.kubernetes.io/part-of: caravan
+        app.kubernetes.io/component: agent
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: caravan-agent
+          image: __CARAVAN_AGENT_IMAGE__
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: OPENAI_BASE_URL
+              value: __OPENAI_BASE_URL__
+            - name: OPENAI_MODEL
+              value: __OPENAI_MODEL__
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: caravan-agent-secret
+                  key: OPENAI_API_KEY
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

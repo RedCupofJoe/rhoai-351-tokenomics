@@ -22,7 +22,7 @@ spec:
   strategy:
     type: Docker
     dockerStrategy:
-      dockerfilePath: ui/Dockerfile
+      dockerfilePath: ui/Containerfile
   output:
     to:
       kind: ImageStreamTag

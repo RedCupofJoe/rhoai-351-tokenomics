@@ -1,0 +1,29 @@
+FROM registry.access.redhat.com/ubi9/python-312
+
+USER 0
+# UBI 9 ships SQLite 3.34, which cannot run Open WebUI migrations that DROP COLUMN.
+# SQLite 3.35 added that statement. Install a newer library ahead of the system one.
+RUN dnf install -y gcc make tar gzip \
+    && curl -fsSL -o /tmp/sqlite.tar.gz https://www.sqlite.org/2024/sqlite-autoconf-3460100.tar.gz \
+    && tar -xzf /tmp/sqlite.tar.gz -C /tmp \
+    && cd /tmp/sqlite-autoconf-3460100 \
+    && ./configure --prefix=/usr/local \
+    && make -j"$(nproc)" \
+    && make install \
+    && echo /usr/local/lib > /etc/ld.so.conf.d/sqlite.conf \
+    && ldconfig \
+    && rm -rf /tmp/sqlite.tar.gz /tmp/sqlite-autoconf-3460100 \
+    && dnf clean all
+
+USER 1001
+WORKDIR /opt/app-root/src
+COPY --chown=1001:0 openwebui/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+ENV PYTHONUNBUFFERED=1 \
+    HOST=127.0.0.1 \
+    PORT=8080 \
+    DATA_DIR=/data \
+    HOME=/tmp \
+    LD_LIBRARY_PATH=/usr/local/lib
+EXPOSE 8080
+CMD ["open-webui", "serve", "--host", "127.0.0.1", "--port", "8080"]

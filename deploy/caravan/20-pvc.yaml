@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: open-webui
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

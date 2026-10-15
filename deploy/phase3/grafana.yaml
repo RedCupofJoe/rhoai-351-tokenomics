@@ -1,0 +1,21 @@
+# Grafana instance. Dashboards and datasources select the dashboards label.
+# spec.version is the UBI image built from grafana/Containerfile.
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: maas-tokenomics
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: grafana
+    dashboards: __GRAFANA_LABEL__
+    folders: __GRAFANA_LABEL__
+spec:
+  version: "__GRAFANA_IMAGE__"
+  config:
+    log:
+      mode: console
+  route:
+    spec:
+      tls:
+        termination: edge

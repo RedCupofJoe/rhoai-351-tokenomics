@@ -35,15 +35,16 @@ decoded_cost = decoded_tokens * decoded_rate_per_token
 
 ```text
 tokenomics/                 shared cost and usage parsing
-exporter/                   Prometheus exporter
-ui/                         FastAPI pricing calculator and static UI
+exporter/                   Prometheus exporter and its UBI Containerfile
+ui/                         FastAPI pricing calculator, static UI, and its UBI Containerfile
+grafana/                    UBI Containerfile for the Grafana server image
 optional/litellm_callback.py
 deploy/phase1               namespaces, service accounts, monitoring RBAC
 deploy/phase2               exporter, Service, ServiceMonitor
-deploy/phase3               Grafana dashboard JSON, GrafanaDashboard, PersesDashboard
+deploy/phase3               Grafana operator subscription, Grafana instance, datasource, dashboard, PersesDashboard
 deploy/phase4               pricing UI, Service, Route
 deploy/optional             log-reader Role, not applied unless requested
-deploy/build                OpenShift BuildConfigs
+deploy/build                OpenShift BuildConfigs for the Containerfiles
 deploy.sh
 ```
 
@@ -57,8 +58,8 @@ The pricing page and the exporter are customer code. They run on Red Hat OpenShi
 | `oauth-proxy` (`registry.redhat.io/openshift4/ose-oauth-proxy-rhel9`) | OpenShift | Signs the pricing route in with the cluster identity |
 | Service CA | OpenShift | TLS for the proxy and for Thanos queries |
 | User-workload monitoring, `ServiceMonitor`, Prometheus Operator, Thanos Querier | OpenShift | Scrapes `maas_user_token_usage_total` and answers the pricing page |
-| `BuildConfig`, `ImageStream`, internal registry | OpenShift | Builds the exporter and UI images |
-| UBI 9 Python 3.12 (`registry.access.redhat.com/ubi9/python-312`) | Red Hat UBI | Base image. The application copied onto it is customer code |
+| `BuildConfig`, `ImageStream`, internal registry | OpenShift | Builds the exporter, UI, and Grafana images from Containerfiles |
+| UBI 9 (`registry.access.redhat.com/ubi9/python-312` and `registry.access.redhat.com/ubi9/ubi`) | Red Hat UBI | Base image for every image this repository builds |
 | Optional pod-log Role | OpenShift API | Off unless `APPLY_LOG_RBAC=true` |
 | `PersesDashboard` in the OpenShift AI monitoring namespace | OpenShift AI Observability | Tokenomics view in the OpenShift AI UI. The CRD comes from the Cluster Observability Operator |
 | `cluster-prometheus-datasource` | OpenShift AI | Datasource that can read the Thanos series this exporter publishes |
@@ -71,7 +72,7 @@ These are not Red Hat OpenShift or OpenShift AI components:
 | Pricing UI | FastAPI and the static page in `ui/` |
 | `prometheus-client` | PyPI library that writes the text format OpenShift Prometheus scrapes |
 | SQLite checkpoint | `sqlite3` from the UBI Python image, stored on the exporter PVC. It is not a Red Hat database service |
-| Grafana Operator (`grafana.integreatly.org`) and `deploy/phase3/tokenomics.json` | Community dashboard. `deploy.sh` applies it only when that CRD is already installed. OpenShift AI Observability uses the Perses dashboard |
+| Grafana Operator (`grafana.integreatly.org`) from the Community Operators catalog, plus the Grafana server tarball in `grafana/Containerfile` | Community operator and upstream Grafana OSS. The image base is UBI. OpenShift AI Observability uses the Perses dashboard |
 | MLflow Tracking API and LiteLLM spend logs | Optional readers. Both stay off until their URLs are set. OpenShift AI does not ship either as the MaaS usage API |
 
 ## Metrics
@@ -112,6 +113,14 @@ Or run `./scripts/enable-user-workload-monitoring.sh`, which creates the ConfigM
 ./deploy.sh 2 3 4
 ```
 
+Phase 5 is separate. It creates the `test-project` namespace, builds Open WebUI from `openwebui/Containerfile` (UBI 9 Python), and deploys the Caravan agent plus Open WebUI. Open WebUI listens on `127.0.0.1` and the OpenShift `oauth-proxy` sidecar is the login. Set `OPENAI_API_KEY` in the environment before the first run; the key is stored in `caravan-agent-secret` and is not committed.
+
+```bash
+export OPENAI_API_KEY=...
+export OAUTH_PROXY_IMAGE=registry.redhat.io/openshift4/ose-oauth-proxy-rhel9:v4.21
+./deploy.sh 5
+```
+
 `./deploy.sh` alone runs all four phases and expects the images to exist. Override namespaces and images with the variables in `deploy/env.example`.
 
 ```bash
@@ -124,7 +133,7 @@ export UI_IMAGE=image-registry.openshift-image-registry.svc:5000/maas-finops-ui/
 
 The exporter Deployment stays in `FINOPS_NAMESPACE` (default `maas-finops-ui`). It is a separate Deployment. It pulls MLflow when `MLFLOW_TRACKING_URI` is set, and it accepts usage JSON on `POST /v1/usage`. OpenShift Cluster Logging can forward MaaS pod logs to that endpoint with `deploy/optional/cluster-log-forwarder.yaml`. That file is not applied by `deploy.sh`.
 
-Phase 3 creates new dashboard objects. It does not edit the existing MaaS Usage dashboard. The Grafana ConfigMap is labeled `grafana_dashboard=1`, `console.openshift.io/odc-dashboard=true`, `dashboard=true`, and `app.kubernetes.io/part-of=rhods-dashboard`. The Perses dashboard is labeled `app.opendatahub.io/dashboard=true` and `platform.opendatahub.io/part-of=dashboard`, which is what the OpenShift AI 3.5 Observability UI selects. A `GrafanaDashboard` or `PersesDashboard` is applied only when that CRD is already installed.
+Phase 3 installs the Grafana operator from the Community Operators catalog (`grafana-operator`, channel `v5`) and creates a Grafana instance, a Thanos datasource, and the tokenomics dashboard in `maas-finops-ui`. It leaves the existing MaaS Usage dashboard unchanged. The Grafana instance is labeled `dashboards=grafana` and `folders=grafana`. The dashboard and datasource select `dashboards=grafana`. The Grafana process image is `grafana/Containerfile`, whose base is UBI 9; `./scripts/build-images.sh` builds it before phase 3. A copy of the dashboard ConfigMap in `openshift-config-managed` is labeled `console.openshift.io/dashboard=true` and `console.openshift.io/odc-dashboard=true`. Those labels put **Tokenomics** in the Administrator **Observe → Dashboards** menu and the Developer **Observe → Dashboards** menu. Another copy in the OpenShift AI monitoring namespace is labeled `grafana_dashboard=1`, `console.openshift.io/odc-dashboard=true`, `dashboard=true`, and `app.kubernetes.io/part-of=rhods-dashboard`. The Perses dashboard is labeled `app.opendatahub.io/dashboard=true` and `platform.opendatahub.io/part-of=dashboard`, which is what the OpenShift AI 3.5 Observability UI selects. `PersesDashboard` is applied when that CRD is already installed.
 
 The Perses datasource name defaults to `data-science-prometheus-datasource`. If that store does not contain user-workload series, set `PERSES_DATASOURCE` to the datasource that can query Thanos, or use the Grafana dashboard against user-workload monitoring.
 

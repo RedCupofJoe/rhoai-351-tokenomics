@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the exporter and pricing UI with OpenShift binary builds.
+# Build the exporter, pricing UI, and Grafana images from their Containerfiles.
 # Run ./deploy.sh 1 first so the namespaces exist.
 set -euo pipefail
 
@@ -23,10 +23,16 @@ sed \
   -e "s|__FINOPS_NAMESPACE__|${FINOPS_NAMESPACE}|g" \
   -e "s|__UI_NAMESPACE__|${UI_NAMESPACE}|g" \
   "${ROOT}/deploy/build/ui-build.yaml" | oc apply -f -
+sed \
+  -e "s|__FINOPS_NAMESPACE__|${FINOPS_NAMESPACE}|g" \
+  -e "s|__UI_NAMESPACE__|${UI_NAMESPACE}|g" \
+  "${ROOT}/deploy/build/grafana-build.yaml" | oc apply -f -
 
 oc -n "${FINOPS_NAMESPACE}" start-build maas-tokenomics-exporter --from-dir="${ROOT}" --follow
 oc -n "${UI_NAMESPACE}" start-build maas-tokenomics-ui --from-dir="${ROOT}" --follow
+oc -n "${FINOPS_NAMESPACE}" start-build maas-tokenomics-grafana --from-dir="${ROOT}" --follow
 
 echo "Images:"
 echo "  image-registry.openshift-image-registry.svc:5000/${FINOPS_NAMESPACE}/maas-tokenomics-exporter:0.1.0"
 echo "  image-registry.openshift-image-registry.svc:5000/${UI_NAMESPACE}/maas-tokenomics-ui:0.1.0"
+echo "  image-registry.openshift-image-registry.svc:5000/${FINOPS_NAMESPACE}/maas-tokenomics-grafana:0.1.0"

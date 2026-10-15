@@ -1,0 +1,39 @@
+# Token used by the Grafana datasource to query Thanos. The Grafana operator
+# creates its own pod ServiceAccount. This account exists only so the
+# datasource can send a cluster-monitoring-view bearer token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maas-tokenomics-grafana
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: grafana
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: __FINOPS_NAMESPACE__-grafana-monitoring-view
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: grafana
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: maas-tokenomics-grafana
+    namespace: __FINOPS_NAMESPACE__
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: maas-tokenomics-grafana-token
+  namespace: __FINOPS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: grafana
+  annotations:
+    kubernetes.io/service-account.name: maas-tokenomics-grafana
+type: kubernetes.io/service-account-token
