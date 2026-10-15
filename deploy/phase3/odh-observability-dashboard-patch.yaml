@@ -1,0 +1,5 @@
+# Merge patch for OdhDashboardConfig. Shows Observe & monitor → Dashboard,
+# including the Models-as-a-Service Usage view.
+spec:
+  dashboardConfig:
+    observabilityDashboard: true

@@ -14,6 +14,10 @@ These are new objects. They are not patches of existing MaaS objects.
 | 1 | ClusterRoleBinding to the existing `cluster-monitoring-view` role | cluster |
 | 1 | ClusterRole `maas-tokenomics-auth-review` and a binding for the pricing UI service account. This allows `create` on `subjectaccessreviews` so the UI can tell a cluster admin from a normal user. It does not grant admin rights. | cluster |
 | 2 | ConfigMap, PVC, standalone Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops-ui` |
+| 3 | Subscriptions `cluster-observability-operator`, `opentelemetry-product`, and `tempo-product` (Red Hat operators, channel `stable`) | `openshift-operators` |
+| 3 | Merge patch: `DSCInitialization` `spec.monitoring.metrics` storage `5Gi`, retention `90d`, replicas `1` | cluster |
+| 3 | Merge patch: `OdhDashboardConfig` `spec.dashboardConfig.observabilityDashboard: true` | `redhat-ods-applications` |
+| 3 | Merge patch: `Dashboard` `spec.observability.enabled: true` and Perses service `data-science-perses` | cluster |
 | 3 | Subscription `grafana-operator` (Community Operators, channel `v5`) | `openshift-operators` |
 | 3 | ServiceAccount `maas-tokenomics-grafana`, its token Secret, and a ClusterRoleBinding to `cluster-monitoring-view` | `maas-finops-ui` and cluster |
 | 3 | Grafana `maas-tokenomics`, GrafanaDatasource `thanos`, GrafanaDashboard `maas-tokenomics`, dashboard ConfigMap | `maas-finops-ui` |
@@ -87,7 +91,7 @@ Enabling MLflow tracing on a gateway or model pod that does not already emit tra
 ## 4. What this project will not change for you
 
 - No sidecar is added to MaaS, gateway, or model pods.
-- No `DataScienceCluster` or `DataScienceClusterInitialization` field is set, including metrics exporters.
+- No `DataScienceCluster` component management state is changed. Phase 3 does set `DSCInitialization` `spec.monitoring.metrics` so the built-in MaaS observability dashboard has a metrics store. It does not set metrics exporters.
 - No OpenTelemetry Collector config is rewritten.
 - No Limitador `TokenRateLimitPolicy` or TelemetryPolicy is edited. `authorized_hits` stays the combined gateway total.
 - User-workload monitoring is required for the ServiceMonitor and is not enabled by `deploy.sh`. A cluster administrator turns it on with `./scripts/enable-user-workload-monitoring.sh`. That edits `cluster-monitoring-config` in `openshift-monitoring`.

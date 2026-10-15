@@ -18,6 +18,7 @@ PLACEHOLDERS = {
     "__PERSES_DATASOURCE__": "data-science-prometheus-datasource",
     "__CARAVAN_NAMESPACE__": "test-project",
     "__CARAVAN_AGENT_IMAGE__": "registry.example/caravan-agent:dev1",
+    "__CARAVAN_BASE_IMAGE__": "image-registry.example/openshift/python:3.12-ubi9",
     "__OPENWEBUI_IMAGE__": "registry.example/open-webui:0.1.0",
     "__OPENAI_BASE_URL__": "https://maas.example/v1",
     "__OPENAI_MODEL__": "example-model",
@@ -41,6 +42,9 @@ def test_manifests_parse(path: Path) -> None:
         assert token not in rendered
     documents = list(yaml.safe_load_all(rendered))
     assert documents
+    if path.name.endswith("-patch.yaml"):
+        assert all(isinstance(doc, dict) and "spec" in doc for doc in documents)
+        return
     assert all(isinstance(doc, dict) and doc.get("kind") for doc in documents)
 
 
@@ -77,6 +81,18 @@ def test_grafana_operator_resources_select_the_same_instance() -> None:
     script = (ROOT / "deploy.sh").read_text(encoding="utf-8")
     assert "deploy/phase3/grafana.yaml" in script
     assert "deploy/phase3/operator-subscription.yaml" in script
+    observability = next(yaml.safe_load_all((ROOT / "deploy/phase3/cluster-observability-subscription.yaml").read_text(encoding="utf-8")))
+    assert observability["spec"]["source"] == "redhat-operators"
+    assert observability["spec"]["channel"] == "stable"
+    dashboard_patch = next(yaml.safe_load_all(render((ROOT / "deploy/phase3/dashboard-observability-patch.yaml").read_text(encoding="utf-8"))))
+    assert dashboard_patch["spec"]["observability"]["enabled"] is True
+    assert dashboard_patch["spec"]["observability"]["persesService"]["namespace"] == "redhat-ods-monitoring"
+    dsci_patch = next(yaml.safe_load_all(render((ROOT / "deploy/phase3/dsci-monitoring-patch.yaml").read_text(encoding="utf-8"))))
+    assert dsci_patch["spec"]["monitoring"]["metrics"]["storage"]["size"] == "5Gi"
+    assert "deploy/phase3/opentelemetry-subscription.yaml" in script
+    assert "deploy/phase3/tempo-subscription.yaml" in script
+    assert "deploy/phase3/dashboard-observability-patch.yaml" in script
+    assert "observabilityDashboard" in (ROOT / "deploy/phase3/odh-observability-dashboard-patch.yaml").read_text(encoding="utf-8")
 
 
 def test_images_are_built_from_ubi_containerfiles() -> None:
@@ -105,6 +121,10 @@ def test_open_webui_is_behind_the_openshift_login_sidecar() -> None:
     assert containers["open-webui"]["env"]
     host = next(item for item in containers["open-webui"]["env"] if item["name"] == "HOST")
     assert host["value"] == "127.0.0.1"
+    base = next(item for item in containers["open-webui"]["env"] if item["name"] == "OPENAI_API_BASE_URL")
+    assert base["value"] == "https://maas.example/v1"
+    persist = next(item for item in containers["open-webui"]["env"] if item["name"] == "ENABLE_PERSISTENT_CONFIG")
+    assert persist["value"] == "false"
     assert any("http://127.0.0.1:8080" in arg for arg in containers["oauth-proxy"]["args"])
     assert containers["oauth-proxy"]["image"] == "registry.example/oauth-proxy:v4.18"
     route = next(yaml.safe_load_all(render((ROOT / "deploy/caravan/60-route.yaml").read_text(encoding="utf-8"))))
@@ -118,8 +138,17 @@ def test_open_webui_is_behind_the_openshift_login_sidecar() -> None:
         for item in containers["open-webui"]["env"]
         if item["name"] == "OPENAI_API_KEY"
     )
-    assert agent_key == webui_key == {"name": "caravan-agent-secret", "key": "OPENAI_API_KEY"}
-    assert "test-agent-secret" not in (ROOT / "deploy/caravan").joinpath("30-caravan-agent.yaml").read_text(encoding="utf-8")
+    assert agent_key == webui_key == {"name": "ojoseph-test-agent-secret", "key": "OPENAI_API_KEY"}
+    assert agent["metadata"]["name"] == "ojoseph-test-agent"
+    agent_text = (ROOT / "deploy/caravan/30-caravan-agent.yaml").read_text(encoding="utf-8")
+    assert "name: test-agent-secret" not in agent_text
+    assert "caravan-agent" not in agent_text
+    ubi = next(yaml.safe_load_all(render((ROOT / "deploy/caravan/35-ojoseph-test-agent.yaml").read_text(encoding="utf-8"))))
+    ubi_container = ubi["spec"]["template"]["spec"]["containers"][0]
+    assert ubi["metadata"]["name"] == "ojoseph-test-agent"
+    assert ubi_container["image"] == "image-registry.example/openshift/python:3.12-ubi9"
+    assert ubi_container["env"][-1]["valueFrom"]["secretKeyRef"] == agent_key
+    assert "deploy/caravan/35-ojoseph-test-agent.yaml" in (ROOT / "deploy.sh").read_text(encoding="utf-8")
 
 
 def test_servicemonitor_matches_exporter_service() -> None:

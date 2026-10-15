@@ -1,25 +1,26 @@
-# The agent image is supplied by CARAVAN_AGENT_IMAGE. This repository does not
-# contain that application's source, so it is not rebuilt from a Containerfile.
+# Unused. Phase 5 deploys deploy/caravan/35-ojoseph-test-agent.yaml instead.
+# Applying this file would replace that Deployment with CARAVAN_AGENT_IMAGE.
+# This repository does not contain that application's source.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: caravan-agent
+  name: ojoseph-test-agent
   namespace: __CARAVAN_NAMESPACE__
   labels:
-    app: caravan-agent
-    app.kubernetes.io/name: caravan-agent
+    app: ojoseph-test-agent
+    app.kubernetes.io/name: ojoseph-test-agent
     app.kubernetes.io/part-of: caravan
     app.kubernetes.io/component: agent
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: caravan-agent
+      app: ojoseph-test-agent
   template:
     metadata:
       labels:
-        app: caravan-agent
-        app.kubernetes.io/name: caravan-agent
+        app: ojoseph-test-agent
+        app.kubernetes.io/name: ojoseph-test-agent
         app.kubernetes.io/part-of: caravan
         app.kubernetes.io/component: agent
     spec:
@@ -29,7 +30,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: caravan-agent
+        - name: ojoseph-test-agent
           image: __CARAVAN_AGENT_IMAGE__
           imagePullPolicy: Always
           securityContext:
@@ -44,7 +45,7 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: caravan-agent-secret
+                  name: ojoseph-test-agent-secret
                   key: OPENAI_API_KEY
           resources:
             requests:

@@ -1,0 +1,17 @@
+# Tempo Operator from the Red Hat catalog. The observability stack uses it
+# when traces are configured. It is installed with the metrics stack so the
+# OpenShift AI operator preconditions are satisfied.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: tempo-product
+  namespace: openshift-operators
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: observability
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: tempo-product
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

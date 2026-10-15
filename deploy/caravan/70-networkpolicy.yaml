@@ -1,14 +1,14 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: caravan-agent
+  name: ojoseph-test-agent
   namespace: __CARAVAN_NAMESPACE__
   labels:
     app.kubernetes.io/part-of: caravan
 spec:
   podSelector:
     matchLabels:
-      app: caravan-agent
+      app.kubernetes.io/component: agent
   policyTypes:
     - Ingress
     - Egress

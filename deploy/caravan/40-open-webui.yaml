@@ -58,10 +58,14 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: caravan-agent-secret
+                  name: ojoseph-test-agent-secret
                   key: OPENAI_API_KEY
             - name: DEFAULT_MODELS
               value: __OPENAI_MODEL__
+            - name: ENABLE_OLLAMA_API
+              value: "false"
+            - name: ENABLE_PERSISTENT_CONFIG
+              value: "false"
             - name: WEBUI_AUTH
               value: "false"
             - name: WEBUI_SECRET_KEY

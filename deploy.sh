@@ -8,12 +8,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FINOPS_NAMESPACE="${FINOPS_NAMESPACE:-maas-finops-ui}"
 UI_NAMESPACE="${UI_NAMESPACE:-maas-finops-ui}"
 OBS_NAMESPACE="${OBS_NAMESPACE:-redhat-ods-monitoring}"
+APPLICATIONS_NAMESPACE="${APPLICATIONS_NAMESPACE:-redhat-ods-applications}"
+DSCI_NAME="${DSCI_NAME:-default-dsci}"
+DASHBOARD_NAME="${DASHBOARD_NAME:-default-dashboard}"
 CONSOLE_NAMESPACE="${CONSOLE_NAMESPACE:-openshift-config-managed}"
 CARAVAN_NAMESPACE="${CARAVAN_NAMESPACE:-test-project}"
 CARAVAN_AGENT_IMAGE="${CARAVAN_AGENT_IMAGE:-registry.custom.mirror/caravan-agent:dev1}"
+CARAVAN_BASE_IMAGE="${CARAVAN_BASE_IMAGE:-image-registry.openshift-image-registry.svc:5000/openshift/python:3.12-ubi9}"
 OPENWEBUI_IMAGE="${OPENWEBUI_IMAGE:-image-registry.openshift-image-registry.svc:5000/${CARAVAN_NAMESPACE}/open-webui:0.1.0}"
-OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://maas.apps.openshift-ai-pilot-test.kubic.sandbox.ngaxc.net/v1}"
-OPENAI_MODEL="${OPENAI_MODEL:-aws-bedrock-nemotron-super-3-120b}"
+OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://maas.apps.ocp.tlphn.sandbox983.opentlc.com/v1}"
+OPENAI_MODEL="${OPENAI_MODEL:-publishers/llm/models/gemma-2-9b-it}"
 MAAS_NAMESPACE="${MAAS_NAMESPACE:-models-as-a-service}"
 GRAFANA_LABEL="${GRAFANA_LABEL:-grafana}"
 PERSES_DATASOURCE="${PERSES_DATASOURCE:-data-science-prometheus-datasource}"
@@ -38,10 +42,19 @@ render() {
     -e "s|__PERSES_DATASOURCE__|${PERSES_DATASOURCE}|g" \
     -e "s|__CARAVAN_NAMESPACE__|${CARAVAN_NAMESPACE}|g" \
     -e "s|__CARAVAN_AGENT_IMAGE__|${CARAVAN_AGENT_IMAGE}|g" \
+    -e "s|__CARAVAN_BASE_IMAGE__|${CARAVAN_BASE_IMAGE}|g" \
     -e "s|__OPENWEBUI_IMAGE__|${OPENWEBUI_IMAGE}|g" \
     -e "s|__OPENAI_BASE_URL__|${OPENAI_BASE_URL}|g" \
     -e "s|__OPENAI_MODEL__|${OPENAI_MODEL}|g" \
     "$1"
+}
+
+merge_patch() {
+  local target="$1"
+  local file="$2"
+  shift 2
+  echo "Patching ${target} from ${file}"
+  oc patch "${target}" --type merge -p "$(render "${file}")" "$@"
 }
 
 apply_file() {
@@ -112,6 +125,43 @@ publish_dashboard_configmap() {
     --dry-run=client -o yaml | oc apply -f -
 }
 
+ensure_cluster_observability() {
+  apply_file "${ROOT}/deploy/phase3/cluster-observability-subscription.yaml"
+  apply_file "${ROOT}/deploy/phase3/opentelemetry-subscription.yaml"
+  apply_file "${ROOT}/deploy/phase3/tempo-subscription.yaml"
+  echo "Waiting for the observability operators"
+  local i
+  for i in $(seq 1 60); do
+    if oc get crd perses.perses.dev >/dev/null 2>&1 \
+      && oc get crd monitoringstacks.monitoring.rhobs >/dev/null 2>&1 \
+      && oc get crd opentelemetrycollectors.opentelemetry.io >/dev/null 2>&1 \
+      && oc get crd tempomonolithics.tempo.grafana.com >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 5
+  done
+  echo "Observability operator CRDs were not installed. Confirm the redhat-operators catalog is available." >&2
+  exit 1
+}
+
+enable_maas_observability() {
+  ensure_cluster_observability
+  merge_patch "dscinitialization/${DSCI_NAME}" "${ROOT}/deploy/phase3/dsci-monitoring-patch.yaml"
+  merge_patch "odhdashboardconfig/odh-dashboard-config" "${ROOT}/deploy/phase3/odh-observability-dashboard-patch.yaml" -n "${APPLICATIONS_NAMESPACE}"
+  echo "Waiting for Perses service data-science-perses in ${OBS_NAMESPACE}"
+  local i
+  for i in $(seq 1 90); do
+    if oc -n "${OBS_NAMESPACE}" get service data-science-perses >/dev/null 2>&1; then
+      merge_patch "dashboard/${DASHBOARD_NAME}" "${ROOT}/deploy/phase3/dashboard-observability-patch.yaml"
+      echo "MaaS observability dashboard proxy is enabled."
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Perses service ${OBS_NAMESPACE}/data-science-perses was not created." >&2
+  exit 1
+}
+
 ensure_grafana_operator() {
   apply_file "${ROOT}/deploy/phase3/operator-subscription.yaml"
   echo "Waiting for Grafana operator CRDs from the Community Operators catalog"
@@ -171,6 +221,7 @@ phase3() {
     echo "Namespace ${OBS_NAMESPACE} does not exist. Set OBS_NAMESPACE to the RHOAI monitoring namespace." >&2
     exit 1
   fi
+  enable_maas_observability
   ensure_grafana_operator
   apply_file "${ROOT}/deploy/phase3/grafana-rbac.yaml"
   apply_file "${ROOT}/deploy/phase3/10-service-ca.yaml"
@@ -265,14 +316,14 @@ phase5() {
   apply_file "${ROOT}/deploy/caravan/00-namespace.yaml"
   apply_file "${ROOT}/deploy/caravan/10-serviceaccount.yaml"
   apply_file "${ROOT}/deploy/caravan/20-pvc.yaml"
-  if oc -n "${CARAVAN_NAMESPACE}" get secret caravan-agent-secret >/dev/null 2>&1; then
-    echo "Secret ${CARAVAN_NAMESPACE}/caravan-agent-secret already exists."
+  if oc -n "${CARAVAN_NAMESPACE}" get secret ojoseph-test-agent-secret >/dev/null 2>&1; then
+    echo "Secret ${CARAVAN_NAMESPACE}/ojoseph-test-agent-secret already exists."
   else
-    oc -n "${CARAVAN_NAMESPACE}" create secret generic caravan-agent-secret \
+    oc -n "${CARAVAN_NAMESPACE}" create secret generic ojoseph-test-agent-secret \
       --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY:-}"
-    echo "Created ${CARAVAN_NAMESPACE}/caravan-agent-secret."
+    echo "Created ${CARAVAN_NAMESPACE}/ojoseph-test-agent-secret."
     if [[ -z "${OPENAI_API_KEY:-}" ]]; then
-      echo "OPENAI_API_KEY was empty. Set it with: oc -n ${CARAVAN_NAMESPACE} create secret generic caravan-agent-secret --from-literal=OPENAI_API_KEY=... --dry-run=client -o yaml | oc apply -f -"
+      echo "OPENAI_API_KEY was empty. Set it with: oc -n ${CARAVAN_NAMESPACE} create secret generic ojoseph-test-agent-secret --from-literal=OPENAI_API_KEY=... --dry-run=client -o yaml | oc apply -f -"
     fi
   fi
   ensure_named_secret "${CARAVAN_NAMESPACE}" open-webui-secret WEBUI_SECRET_KEY "$(openssl rand -hex 32)"
@@ -280,7 +331,9 @@ phase5() {
   apply_file "${ROOT}/deploy/caravan/50-service.yaml"
   apply_file "${ROOT}/deploy/caravan/60-route.yaml"
   ensure_openwebui_image
-  apply_file "${ROOT}/deploy/caravan/30-caravan-agent.yaml"
+  apply_file "${ROOT}/deploy/caravan/35-ojoseph-test-agent.yaml"
+  oc -n "${CARAVAN_NAMESPACE}" delete deployment caravan-agent caravan-agent-ubi --ignore-not-found
+  oc -n "${CARAVAN_NAMESPACE}" delete networkpolicy caravan-agent --ignore-not-found
   apply_file "${ROOT}/deploy/caravan/40-open-webui.yaml"
   apply_file "${ROOT}/deploy/caravan/70-networkpolicy.yaml"
   echo "Open WebUI route:"

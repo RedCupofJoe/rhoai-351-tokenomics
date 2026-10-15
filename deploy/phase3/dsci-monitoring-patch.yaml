@@ -1,0 +1,12 @@
+# Merge patch for DSCInitialization. Applied with oc patch --type merge.
+# This sets the metrics store the built-in MaaS observability dashboard reads.
+# It does not change DataScienceCluster component states.
+spec:
+  monitoring:
+    managementState: Managed
+    namespace: __OBS_NAMESPACE__
+    metrics:
+      replicas: 1
+      storage:
+        size: 5Gi
+        retention: 90d

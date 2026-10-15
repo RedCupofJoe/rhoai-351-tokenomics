@@ -1,0 +1,70 @@
+# ojoseph-test agent, using the Python 3.12 UBI imagestream already imported
+# in the openshift namespace.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ojoseph-test-agent
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app: ojoseph-test-agent
+    app.kubernetes.io/name: ojoseph-test-agent
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: agent
+  annotations:
+    openshift.io/display-name: ojoseph-test agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ojoseph-test-agent
+  template:
+    metadata:
+      labels:
+        app: ojoseph-test-agent
+        app.kubernetes.io/name: ojoseph-test-agent
+        app.kubernetes.io/part-of: caravan
+        app.kubernetes.io/component: agent
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ojoseph-test-agent
+          image: __CARAVAN_BASE_IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-u", "-c"]
+          args:
+            - |
+              import os, time
+              print(
+                  "ojoseph-test agent ready "
+                  f"model={os.environ.get('OPENAI_MODEL', '')} "
+                  f"base={os.environ.get('OPENAI_BASE_URL', '')} "
+                  f"key_set={bool(os.environ.get('OPENAI_API_KEY'))}",
+                  flush=True,
+              )
+              while True:
+                  time.sleep(3600)
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: OPENAI_BASE_URL
+              value: __OPENAI_BASE_URL__
+            - name: OPENAI_MODEL
+              value: __OPENAI_MODEL__
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ojoseph-test-agent-secret
+                  key: OPENAI_API_KEY
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

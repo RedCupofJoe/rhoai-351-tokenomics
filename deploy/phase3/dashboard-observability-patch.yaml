@@ -1,0 +1,9 @@
+# Merge patch for Dashboard default-dashboard. Applied with oc patch --type merge.
+# Turns on the Perses proxy the OpenShift AI Observe & monitor page uses.
+spec:
+  observability:
+    enabled: true
+    persesService:
+      name: data-science-perses
+      namespace: __OBS_NAMESPACE__
+      port: 8080
