@@ -117,7 +117,7 @@ Phase 5 is separate. It creates the `test-project` namespace, builds Open WebUI 
 
 Phase 5 also turns on the Agent Catalog and MCP Catalog, sets the MCP Lifecycle Operator to `Managed`, and deploys `researcher-agent` beside three keyless research MCP servers (web fetch, Wikipedia, and arXiv). The researcher image is built from `researcher/Containerfile`. Both catalogs list that agent and those servers. `RESEARCHER_MODEL` defaults to `publishers/llm/models/gpt-oss-20b`, which is the model on the existing key's subscription.
 
-`scripts/create_htpasswd_users.sh` adds the `tokenomics-htpasswd` identity provider beside the existing `rhbk` provider and logs in nora, owen, priya, and samir so those OpenShift users exist. `scripts/impersonate_research_users.py` then asks a different multi-part research question with `oc --as` that user. Each question searches Wikipedia and arXiv, reads the named article or paper, fetches the source pages, and the script records the gateway token counts on the pricing page under the OpenShift username.
+`scripts/create_htpasswd_users.sh` checks the cluster identity providers first. When any provider is already configured, it leaves that authentication in place and does not add HTPasswd. It adds `tokenomics-htpasswd` and logs in nora, owen, priya, and samir only when the local kubeadmin user is the only login. `scripts/impersonate_research_users.py` then asks a different multi-part research question with `oc --as` that user. Each question searches Wikipedia and arXiv, reads the named article or paper, fetches the source pages, and the script records the gateway token counts on the pricing page under the OpenShift username.
 
 ```bash
 export OPENAI_API_KEY=...

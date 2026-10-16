@@ -72,7 +72,8 @@ def test_research_demo_records_four_users_through_mcp_and_ingest() -> None:
     assert "--as" not in record
     creator = (Path(__file__).resolve().parents[1] / "scripts/create_htpasswd_users.sh").read_text(encoding="utf-8")
     assert "tokenomics-htpasswd" in creator
-    assert "expected rhbk" in creator
+    assert "Using the existing authentication providers:" in creator
+    assert creator.index("Using the existing authentication providers:") < creator.index("openshift-config create secret")
     deploy = (Path(__file__).resolve().parents[1] / "deploy.sh").read_text(encoding="utf-8")
     assert "create_htpasswd_users.sh" not in deploy
     rbac = (Path(__file__).resolve().parents[1] / "deploy/caravan/82-research-user-rbac.yaml").read_text(encoding="utf-8")

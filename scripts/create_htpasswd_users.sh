@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Add nora, owen, priya, and samir beside the existing rhbk identity provider.
+# Create nora, owen, priya, and samir only when the cluster has no identity
+# provider besides the local kubeadmin user. An existing provider is left as-is.
 # The htpasswd file is created in a temp directory and is not committed.
 set -euo pipefail
 
@@ -12,6 +13,17 @@ if ! command -v oc >/dev/null 2>&1; then
   echo "oc is required." >&2
   exit 1
 fi
+
+# kubeadmin is the local admin and is not an OAuth identity provider.
+# Any configured provider is the cluster's authentication, so HTPasswd is not added.
+provider_names=$(oc get oauth cluster -o jsonpath='{range .spec.identityProviders[*]}{.name}{"\n"}{end}')
+if [[ -n "$provider_names" ]]; then
+  echo "Using the existing authentication providers:"
+  printf '%s\n' "$provider_names"
+  echo "HTPasswd setup was not run."
+  exit 0
+fi
+
 if ! command -v htpasswd >/dev/null 2>&1; then
   echo "htpasswd is required." >&2
   exit 1
@@ -31,19 +43,17 @@ for name in "${users[@]}"; do
   fi
 done
 
-before=$(oc get oauth cluster -o jsonpath='{.spec.identityProviders[0].name}')
-if [[ "$before" != "rhbk" ]]; then
-  echo "Refusing to continue: first identity provider is ${before}, expected rhbk." >&2
-  exit 1
-fi
+echo "No identity provider is configured besides the local kubeadmin user."
+echo "Adding HTPasswd identity provider ${idp_name}."
 
 oc -n openshift-config create secret generic "$secret_name" \
   --from-file=htpasswd="$htfile" \
   --dry-run=client -o yaml | oc apply -f -
 
-if oc get oauth cluster -o jsonpath='{.spec.identityProviders[*].name}' | grep -q "$idp_name"; then
-  echo "Identity provider ${idp_name} is already present."
-else
+if ! oc patch oauth cluster --type json --patch "$(cat <<'EOF'
+[{"op":"add","path":"/spec/identityProviders","value":[{"name":"tokenomics-htpasswd","mappingMethod":"claim","type":"HTPasswd","htpasswd":{"fileData":{"name":"tokenomics-htpasswd"}}}]}]
+EOF
+)"; then
   oc patch oauth cluster --type json --patch "$(cat <<'EOF'
 [{"op":"add","path":"/spec/identityProviders/-","value":{"name":"tokenomics-htpasswd","mappingMethod":"claim","type":"HTPasswd","htpasswd":{"fileData":{"name":"tokenomics-htpasswd"}}}}]
 EOF
@@ -51,8 +61,8 @@ EOF
 fi
 
 after=$(oc get oauth cluster -o jsonpath='{.spec.identityProviders[0].name}')
-if [[ "$after" != "rhbk" ]]; then
-  echo "Refusing to continue: first identity provider is ${after}, expected rhbk." >&2
+if [[ "$after" != "$idp_name" ]]; then
+  echo "Refusing to continue: first identity provider is ${after}, expected ${idp_name}." >&2
   exit 1
 fi
 echo "Identity providers: $(oc get oauth cluster -o jsonpath='{.spec.identityProviders[*].name}')"
