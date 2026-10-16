@@ -2,7 +2,7 @@
 
 Showback for Models-as-a-Service on Red Hat OpenShift AI 3.5.1. The gateway metric `authorized_hits` is a single combined token count. This extension records **input**, **cache**, and **decoded** tokens per user, exposes them to Prometheus, adds a Tokenomics view to RHOAI Observability, and runs a pricing calculator in its own namespace.
 
-Nothing in this repository patches a MaaS Deployment. Optional changes, if you choose them, are listed in [MAAS_MODIFICATIONS.md](MAAS_MODIFICATIONS.md).
+Nothing in this repository patches a MaaS Deployment. Optional changes, if you choose them, are listed in [MAAS_MODIFICATIONS.md](MAAS_MODIFICATIONS.md). How the pieces fit together, and why they were split this way, is in [appendix/README.md](appendix/README.md).
 
 ## How usage is collected
 
@@ -30,6 +30,8 @@ decoded_cost = decoded_tokens * decoded_rate_per_token
 ```
 
 `tokenomics/cost.py` keeps that formula as a pure function. A flat $/million rate matches the reference helper `flat_million_rate_costs`.
+
+The pricing page stores those rates as a matrix. An administrator adds a provider and maps it to input, cache, and decoded prices. The model list is the models MaaS is serving. Other accepts a name that is not registered. Usage whose model matches that row uses the row's prices. The showback row prices every other model. A comparison table prices the tokens in the current view at every provider.
 
 ## Layout
 

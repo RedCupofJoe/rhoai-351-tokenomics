@@ -49,8 +49,51 @@ def counter_increase(values: list[float]) -> float:
     return total
 
 
-def aggregate_series(series: list[dict], rates_per_token: dict[str, float], currency: str, span: str) -> dict:
-    """Price one row per user, OpenShift project, and model."""
+def provider_for_model(model: str, providers: list[dict]) -> dict | None:
+    """Pick the cost mapping for one usage model.
+
+    An exact model name wins. Everything else uses the showback row, then
+    any ``*`` mapping, then the first provider.
+    """
+    if not providers:
+        return None
+    folded = str(model or "").casefold()
+    exact = [
+        item
+        for item in providers
+        if str(item.get("model") or "*").strip() not in {"", "*"}
+        and str(item.get("model")).casefold() == folded
+    ]
+    if exact:
+        return exact[0]
+    wildcard = [item for item in providers if str(item.get("model") or "*").strip() in {"", "*"}]
+    if wildcard:
+        return next((item for item in wildcard if item.get("local")), wildcard[0])
+    return next((item for item in providers if item.get("local")), providers[0])
+
+
+def _sum_costs(rows: list[dict]) -> dict[str, float]:
+    costs = {f"{kind}_cost": 0.0 for kind in TOKEN_TYPES}
+    costs["total_cost"] = 0.0
+    for row in rows:
+        for key in costs:
+            costs[key] += float((row.get("costs") or {}).get(key, 0.0) or 0.0)
+    return costs
+
+
+def aggregate_series(
+    series: list[dict],
+    rates_per_token: dict[str, float],
+    currency: str,
+    span: str,
+    providers: list[dict] | None = None,
+) -> dict:
+    """Price one row per user, OpenShift project, and model.
+
+    ``providers`` maps each added provider to its own input, cache, and
+    decoded rates. A row uses the provider whose model matches. The default
+    rate covers models that do not match a specific provider.
+    """
     grouped: dict[tuple[str, str, str], dict[str, float]] = {}
     for item in series:
         metric = item.get("metric") or {}
@@ -75,18 +118,21 @@ def aggregate_series(series: list[dict], rates_per_token: dict[str, float], curr
         tokens = {kind: int(round(counts[kind])) for kind in TOKEN_TYPES}
         for kind in TOKEN_TYPES:
             totals[kind] += tokens[kind]
-        costs = cost_from_totals(tokens, rates_per_token)
+        chosen = provider_for_model(model, providers or [])
+        mapped_rates = chosen["rates"] if chosen else rates_per_token
+        costs = cost_from_totals(tokens, mapped_rates)
         rows.append(
             {
                 "user": user,
                 "namespace": namespace,
                 "model": model,
+                "provider": chosen["name"] if chosen else "Local MaaS",
                 "tokens": tokens,
                 "costs": costs,
             }
         )
     rows.sort(key=lambda row: (-row["costs"]["total_cost"], row["user"], row["namespace"], row["model"]))
-    total_costs = cost_from_totals(totals, rates_per_token)
+    total_costs = _sum_costs(rows)
     return {
         "span": span,
         "currency": currency,
@@ -138,7 +184,7 @@ def drop_empty_rows(report: dict) -> dict:
     scoped["users"] = rows
     scoped["projects"] = sorted({row["namespace"] for row in rows})
     scoped["models"] = sorted({row["model"] for row in rows})
-    scoped["totals"] = {"tokens": totals, "costs": cost_from_totals(totals, report["rates_per_token"])}
+    scoped["totals"] = {"tokens": totals, "costs": _sum_costs(rows)}
     return scoped
 
 
@@ -158,6 +204,6 @@ def scope_report(report: dict, viewer: str, admin: bool) -> dict:
     scoped["users"] = rows
     scoped["projects"] = sorted({row["namespace"] for row in rows})
     scoped["models"] = sorted({row["model"] for row in rows})
-    scoped["totals"] = {"tokens": totals, "costs": cost_from_totals(totals, report["rates_per_token"])}
+    scoped["totals"] = {"tokens": totals, "costs": _sum_costs(rows)}
     scoped["scope"] = "self"
     return scoped

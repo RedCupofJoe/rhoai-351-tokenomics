@@ -3,9 +3,10 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from ui.app import create_app, demo_series
+from ui.maas_models import MaasModelCatalog, names_from_refs
 from ui.pricing_store import PricingStore
 from ui.prometheus_query import PrometheusClient, PrometheusError
-from ui.showback import aggregate_series, counter_increase
+from ui.showback import aggregate_series, counter_increase, provider_for_model
 
 
 def test_thanos_query_uses_service_account_token_and_service_ca(tmp_path: Path, monkeypatch) -> None:
@@ -230,12 +231,189 @@ def test_pricing_page_has_token_pie_and_red_hat_themes() -> None:
     css = (root / "ui/static/styles.css").read_text(encoding="utf-8")
     script = (root / "ui/static/app.js").read_text(encoding="utf-8")
     assert 'id="token-pie"' in html
+    assert "demonstration of capabilities, not a supported user interface" in html
+    assert "demo-banner" in css
+    assert 'id="login" class="card hidden"' in html
+    assert "app.js?v=__ASSET_VERSION__" in html
     assert 'id="theme-toggle"' in html
     assert 'data-theme="dark"' in css
     assert "#ee0000" in css
     assert "#151515" in css
     assert "renderPie" in script
     assert "prefers-color-scheme: dark" in script
+    assert 'const openshift = await fetch("/api/me")' in script
+    assert "useBreakGlass" in script
+    assert 'data-field="model-select"' in script
+    assert "/api/models" in script
+    assert "Other" in script
+
+
+def test_legacy_pricing_file_becomes_a_local_provider(tmp_path: Path) -> None:
+    path = tmp_path / "pricing.json"
+    path.write_text(
+        '{"currency":"USD","rates":{"input":1,"cache":2,"decoded":3},"updated_at":"2026-01-01T00:00:00Z"}\n',
+        encoding="utf-8",
+    )
+    loaded = PricingStore(path).load()
+    assert loaded["providers"][0]["name"] == "Local MaaS"
+    assert loaded["providers"][0]["local"] is True
+    assert loaded["rates"]["decoded"] == 3.0
+
+
+def test_provider_matrix_uses_the_showback_row(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    headers = {"Authorization": "Bearer admin-token"}
+    saved = client.put(
+        "/api/pricing",
+        headers=headers,
+        json={
+            "currency": "USD",
+            "rate_unit": "million",
+            "providers": [
+                {
+                    "name": "Local MaaS",
+                    "model": "*",
+                    "local": True,
+                    "rates": {"input": 1, "cache": 0, "decoded": 0},
+                },
+                {
+                    "name": "OpenAI",
+                    "model": "gpt-4o",
+                    "local": False,
+                    "rates": {"input": 5, "cache": 1, "decoded": 15},
+                },
+            ],
+        },
+    )
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["rates_per_token"]["input"] == 0.000001
+    assert body["providers"][1]["name"] == "OpenAI"
+    assert body["providers"][1]["model"] == "gpt-4o"
+    assert body["providers"][1]["rates_per_million"]["decoded"] == 15
+    report = client.get("/api/showback?span=24h", headers=headers)
+    alice = next(row for row in report.json()["users"] if row["user"] == "alice" and row["model"] == "gemma-4")
+    assert round(alice["costs"]["input_cost"], 6) == 0.001
+    page = client.get("/")
+    assert page.headers["cache-control"] == "no-store"
+    assert "__ASSET_VERSION__" not in page.text
+    assert "/static/app.js?v=" in page.text
+    assert 'id="login" class="card hidden"' in page.text
+    assert 'id="provider-matrix"' in page.text
+    assert "Add provider" in page.text
+    duplicate = client.put(
+        "/api/pricing",
+        headers=headers,
+        json={
+            "currency": "USD",
+            "providers": [
+                {"name": "OpenAI", "model": "gpt-4o", "local": True, "rates": {"input": 1, "cache": 0, "decoded": 0}},
+                {"name": "openai", "model": "GPT-4o", "local": False, "rates": {"input": 2, "cache": 0, "decoded": 0}},
+            ],
+        },
+    )
+    assert duplicate.status_code == 400
+
+
+def test_each_provider_maps_cost_for_its_model() -> None:
+    providers = [
+        {
+            "name": "Local MaaS",
+            "model": "*",
+            "local": True,
+            "rates": {"input": 0.000001, "cache": 0.0, "decoded": 0.0},
+        },
+        {
+            "name": "OpenAI",
+            "model": "gpt-4o",
+            "local": False,
+            "rates": {"input": 0.000005, "cache": 0.0, "decoded": 0.0},
+        },
+    ]
+    assert provider_for_model("GPT-4o", providers)["name"] == "OpenAI"
+    assert provider_for_model("gemma-4", providers)["name"] == "Local MaaS"
+    series = [
+        {
+            "metric": {"user": "alice", "namespace": "llm", "token_type": "input", "model": "gpt-4o"},
+            "values": [[1.0, "0"], [2.0, "1000"]],
+        },
+        {
+            "metric": {"user": "alice", "namespace": "llm", "token_type": "input", "model": "gemma-4"},
+            "values": [[1.0, "0"], [2.0, "100"]],
+        },
+    ]
+    report = aggregate_series(series, providers[0]["rates"], "USD", "24h", providers)
+    gpt = next(row for row in report["users"] if row["model"] == "gpt-4o")
+    gemma = next(row for row in report["users"] if row["model"] == "gemma-4")
+    assert gpt["provider"] == "OpenAI"
+    assert gpt["costs"]["input_cost"] == 0.005
+    assert gemma["provider"] == "Local MaaS"
+    assert round(gemma["costs"]["input_cost"], 6) == 0.0001
+    assert round(report["totals"]["costs"]["input_cost"], 6) == 0.0051
+
+
+def test_maas_model_names_include_alias_and_served_name() -> None:
+    names = names_from_refs(
+        [
+            {
+                "spec": {"modelRef": {"kind": "LLMInferenceService", "name": "gemma-2-9b-it"}},
+                "status": {"resolvedModelAlias": "publishers/llm/models/gemma-2-9b-it"},
+            },
+            {
+                "spec": {"modelRef": {"kind": "LLMInferenceService", "name": "gpt-oss-20b"}},
+                "status": {"resolvedModelAlias": "publishers/llm/models/gpt-oss-20b"},
+            },
+            {
+                "spec": {"modelRef": {"kind": "ExternalModel", "name": "openai-gpt"}},
+                "status": {"resolvedModelAlias": "publishers/llm/models/gpt-oss-20b"},
+            },
+        ]
+    )
+    assert names == [
+        "gemma-2-9b-it",
+        "gpt-oss-20b",
+        "openai-gpt",
+        "publishers/llm/models/gemma-2-9b-it",
+        "publishers/llm/models/gpt-oss-20b",
+    ]
+    assert names_from_refs([{"spec": {"modelRef": {"name": "same"}}, "status": {"resolvedModelAlias": "same"}}]) == [
+        "same"
+    ]
+    assert names_from_refs([]) == []
+
+
+def test_model_list_is_cached_and_a_failure_stays_empty() -> None:
+    calls = {"count": 0}
+
+    def listing():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OSError("api down")
+        return [{"spec": {"modelRef": {"name": "gemma-2-9b-it"}}, "status": {"resolvedModelAlias": "alias"}}]
+
+    catalog = MaasModelCatalog(listing)
+    assert catalog() == []
+    assert catalog() == ["alias", "gemma-2-9b-it"]
+    assert catalog() == ["alias", "gemma-2-9b-it"]
+    assert calls["count"] == 2
+
+
+def test_signed_in_user_can_read_the_model_list(tmp_path: Path) -> None:
+    store = PricingStore(tmp_path / "pricing.json")
+    app = create_app(
+        store,
+        demo_series,
+        admin_token="admin-token",
+        demo=False,
+        list_models=lambda: ["publishers/llm/models/gemma-2-9b-it", "gemma-2-9b-it"],
+    )
+    client = TestClient(app)
+    assert client.get("/api/models").status_code == 401
+    listed = client.get("/api/models", headers={"X-Forwarded-User": "nora"})
+    assert listed.status_code == 200
+    assert listed.json()["models"] == ["publishers/llm/models/gemma-2-9b-it", "gemma-2-9b-it"]
+    empty = TestClient(create_app(store, demo_series, admin_token="admin-token", list_models=lambda: []))
+    assert empty.get("/api/models", headers={"Authorization": "Bearer admin-token"}).json() == {"models": []}
 
 
 def test_negative_price_is_rejected(tmp_path: Path) -> None:

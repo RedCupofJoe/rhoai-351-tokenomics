@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MaaS Tokenomics Pricing</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500;600&family=Red+Hat+Text:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=__ASSET_VERSION__">
 </head>
 <body>
   <header class="topbar">
@@ -14,13 +14,14 @@
       <h1>Tokenomics pricing</h1>
     </div>
     <div class="topbar-actions">
-      <p id="session" class="session"></p>
+      <p id="session" class="session">Checking cluster sign-in…</p>
       <button type="button" id="theme-toggle" aria-pressed="false">Dark mode</button>
     </div>
   </header>
+  <p class="demo-banner" role="note">This is a demonstration of capabilities, not a supported user interface.</p>
 
   <main>
-    <section id="login" class="card">
+    <section id="login" class="card hidden">
       <h2>Sign in</h2>
       <p>OpenShift users sign in through the cluster and see only their own usage. The token below is the break-glass administrator token from the <code>maas-pricing-admin</code> secret. It can view every user and project and can set prices.</p>
       <form id="login-form">
@@ -49,28 +50,44 @@
         <h2>Cost per token</h2>
         <p id="pricing-note" class="hint"></p>
         <form id="pricing-form">
-          <div class="rates">
-            <fieldset>
-              <legend>Input</legend>
-              <label for="input-token">Per token</label>
-              <input id="input-token" type="number" min="0" step="any" required>
-              <label for="input-million">Per 1M tokens</label>
-              <input id="input-million" type="number" min="0" step="any" required>
-            </fieldset>
-            <fieldset>
-              <legend>Cache</legend>
-              <label for="cache-token">Per token</label>
-              <input id="cache-token" type="number" min="0" step="any" required>
-              <label for="cache-million">Per 1M tokens</label>
-              <input id="cache-million" type="number" min="0" step="any" required>
-            </fieldset>
-            <fieldset>
-              <legend>Decoded</legend>
-              <label for="decoded-token">Per token</label>
-              <input id="decoded-token" type="number" min="0" step="any" required>
-              <label for="decoded-million">Per 1M tokens</label>
-              <input id="decoded-million" type="number" min="0" step="any" required>
-            </fieldset>
+          <div class="table-wrap">
+            <table class="matrix" id="provider-matrix">
+              <thead>
+                <tr>
+                  <th>Showback</th>
+                  <th>Provider</th>
+                  <th>Model</th>
+                  <th class="num">Input / token</th>
+                  <th class="num">Input / 1M</th>
+                  <th class="num">Cache / token</th>
+                  <th class="num">Cache / 1M</th>
+                  <th class="num">Decoded / token</th>
+                  <th class="num">Decoded / 1M</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="row">
+            <button type="button" id="add-provider">Add provider</button>
+          </div>
+          <h3>This view at each provider</h3>
+          <p class="hint">Each provider maps its own input, cache, and decoded prices. A usage model uses the row with that model name. Other models use the showback row. This table prices the tokens in view at every provider.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Model</th>
+                  <th class="num">Input</th>
+                  <th class="num">Cache</th>
+                  <th class="num">Decoded</th>
+                  <th class="num">Total</th>
+                </tr>
+              </thead>
+              <tbody id="provider-compare"></tbody>
+            </table>
           </div>
           <div class="row">
             <label for="currency">Currency</label>
@@ -118,6 +135,7 @@
                 <th>User</th>
                 <th>Project</th>
                 <th>Model</th>
+                <th>Provider</th>
                 <th class="num">Input tokens</th>
                 <th class="num">Cache tokens</th>
                 <th class="num">Decoded tokens</th>
@@ -137,6 +155,6 @@
       </section>
     </section>
   </main>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

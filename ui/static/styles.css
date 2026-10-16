@@ -82,6 +82,15 @@ body {
   color: var(--topbar-muted);
 }
 
+.demo-banner {
+  margin: 0;
+  padding: 10px 24px;
+  background: #fff4e5;
+  color: #151515;
+  border-bottom: 1px solid #f0ab00;
+  font-weight: 600;
+}
+
 .session { margin: 0; color: var(--topbar-muted); }
 .topbar-actions { display: flex; gap: 12px; align-items: center; }
 
@@ -184,6 +193,12 @@ legend { padding: 0 6px; font-weight: 600; }
 .legend { list-style: none; margin: 8px 0 0; padding: 0; }
 .legend li { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .swatch { width: 12px; height: 12px; border-radius: 2px; flex: none; }
+
+.matrix input[type="text"] { width: 9rem; }
+.matrix input[type="number"] { width: 7.5rem; }
+.matrix select, .matrix .model-field input[type="text"] { width: 16rem; max-width: 100%; }
+.matrix td { vertical-align: middle; }
+.model-field { display: flex; flex-direction: column; gap: 4px; }
 
 .table-wrap { overflow-x: auto; margin-top: 12px; }
 table { width: 100%; border-collapse: collapse; }

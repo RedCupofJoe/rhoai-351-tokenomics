@@ -13,6 +13,7 @@ These are new objects. They are not patches of existing MaaS objects.
 | 1 | Namespace, ServiceAccount `maas-tokenomics-exporter`, ServiceAccount `maas-pricing-ui` | `maas-finops-ui` |
 | 1 | ClusterRoleBinding to the existing `cluster-monitoring-view` role | cluster |
 | 1 | ClusterRole `maas-tokenomics-auth-review` and a binding for the pricing UI service account. This allows `create` on `subjectaccessreviews` so the UI can tell a cluster admin from a normal user. It does not grant admin rights. | cluster |
+| 1 | ClusterRole `maas-tokenomics-model-reader` and a binding for the pricing UI service account. This allows `get` and `list` on `maasmodelrefs` so the cost matrix can list models MaaS is serving. It does not change those objects. | cluster |
 | 2 | ConfigMap, PVC, standalone Deployment, Service, ServiceMonitor, NetworkPolicy | `maas-finops-ui` |
 | 3 | Subscriptions `cluster-observability-operator`, `opentelemetry-product`, and `tempo-product` (Red Hat operators, channel `stable`) | `openshift-operators` |
 | 3 | Merge patch: `DSCInitialization` `spec.monitoring` metrics (5Gi, 90d, 1 replica), `alerting: {}`, and Tempo traces (`pv`, 2160h, sample ratio 0.1) | cluster |

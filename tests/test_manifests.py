@@ -200,6 +200,22 @@ def test_pricing_ui_can_reach_apiserver() -> None:
     assert 6443 in ports
 
 
+def test_ui_serviceaccount_can_list_maas_models() -> None:
+    docs = list(yaml.safe_load_all(render((ROOT / "deploy/phase1/40-model-reader.yaml").read_text(encoding="utf-8"))))
+    role = next(doc for doc in docs if doc["kind"] == "ClusterRole")
+    binding = next(doc for doc in docs if doc["kind"] == "ClusterRoleBinding")
+    rule = role["rules"][0]
+    assert role["metadata"]["name"] == "maas-tokenomics-model-reader"
+    assert rule["apiGroups"] == ["maas.opendatahub.io"]
+    assert rule["resources"] == ["maasmodelrefs"]
+    assert rule["verbs"] == ["get", "list"]
+    assert binding["roleRef"]["name"] == "maas-tokenomics-model-reader"
+    assert binding["subjects"][0]["name"] == "maas-pricing-ui"
+    assert binding["subjects"][0]["namespace"] == "maas-finops-ui"
+    script = (ROOT / "deploy.sh").read_text(encoding="utf-8")
+    assert "maas-tokenomics-model-reader" in script
+
+
 def test_ui_serviceaccount_can_view_thanos() -> None:
     binding = next(
         doc

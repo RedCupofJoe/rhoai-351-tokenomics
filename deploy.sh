@@ -496,6 +496,8 @@ undeploy() {
   oc delete clusterrolebinding "${UI_NAMESPACE}-monitoring-view" --ignore-not-found
   oc delete clusterrolebinding "${UI_NAMESPACE}-auth-review" --ignore-not-found
   oc delete clusterrole maas-tokenomics-auth-review --ignore-not-found
+  oc delete clusterrolebinding "${UI_NAMESPACE}-model-reader" --ignore-not-found
+  oc delete clusterrole maas-tokenomics-model-reader --ignore-not-found
   oc -n "${MAAS_NAMESPACE}" delete role,rolebinding maas-tokenomics-log-reader --ignore-not-found
   oc delete namespace "${FINOPS_NAMESPACE}" "${UI_NAMESPACE}" --ignore-not-found --wait=false
   echo "Namespace deletion requested for ${FINOPS_NAMESPACE} and ${UI_NAMESPACE}."
