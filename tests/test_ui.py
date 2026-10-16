@@ -224,6 +224,20 @@ def test_empty_exporter_series_fall_back_to_model_counters(tmp_path: Path) -> No
     assert personal.json()["users"] == []
 
 
+def test_pricing_page_has_token_pie_and_red_hat_themes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "ui/static/index.html").read_text(encoding="utf-8")
+    css = (root / "ui/static/styles.css").read_text(encoding="utf-8")
+    script = (root / "ui/static/app.js").read_text(encoding="utf-8")
+    assert 'id="token-pie"' in html
+    assert 'id="theme-toggle"' in html
+    assert 'data-theme="dark"' in css
+    assert "#ee0000" in css
+    assert "#151515" in css
+    assert "renderPie" in script
+    assert "prefers-color-scheme: dark" in script
+
+
 def test_negative_price_is_rejected(tmp_path: Path) -> None:
     client = _client(tmp_path)
     response = client.put(

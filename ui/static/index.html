@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MaaS Tokenomics Pricing</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500;600&family=Red+Hat+Text:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -12,7 +13,10 @@
       <p class="eyebrow">RHOAI 3.5.1 MaaS showback</p>
       <h1>Tokenomics pricing</h1>
     </div>
-    <p id="session" class="session"></p>
+    <div class="topbar-actions">
+      <p id="session" class="session"></p>
+      <button type="button" id="theme-toggle" aria-pressed="false">Dark mode</button>
+    </div>
   </header>
 
   <main>
@@ -38,7 +42,7 @@
             <button type="button" data-span="30d">30d</button>
           </div>
         </div>
-        <p class="hint">Costs use reset-aware deltas of token counters in the selected span. Per-user rows come from the exporter. When that series is empty, the page shows model-server totals for every caller.</p>
+        <p class="hint">Costs use reset-aware deltas of token counters in the selected span. Per-user rows come from the exporter. When that series is empty, the page shows model-server totals for every caller. The pie is the input, cache, and decoded mix for the rows in view.</p>
       </section>
 
       <section class="card">
@@ -97,6 +101,16 @@
           </div>
         </div>
         <p id="report-error" class="error" role="alert"></p>
+        <div class="usage-visual">
+          <figure class="pie-card">
+            <svg id="token-pie" viewBox="0 0 120 120" role="img" aria-labelledby="pie-title pie-desc"></svg>
+            <figcaption>
+              <h3 id="pie-title">Token mix</h3>
+              <p id="pie-desc" class="hint"></p>
+              <ul id="pie-legend" class="legend"></ul>
+            </figcaption>
+          </figure>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>

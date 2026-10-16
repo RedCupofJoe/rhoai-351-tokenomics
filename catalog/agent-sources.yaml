@@ -1,0 +1,9 @@
+agent_catalogs:
+  - name: Research
+    id: research_agents
+    type: yaml
+    enabled: true
+    properties:
+      yamlCatalogPath: researcher-agent.yaml
+    labels:
+      - Research

@@ -1,0 +1,9 @@
+mcp_catalogs:
+  - name: Research
+    id: research
+    type: yaml
+    enabled: true
+    properties:
+      yamlCatalogPath: research-mcp.yaml
+    labels:
+      - Research

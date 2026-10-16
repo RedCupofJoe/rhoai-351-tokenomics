@@ -1,0 +1,37 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: researcher-agent
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: caravan
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: researcher-agent
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: caravan
+spec:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: researcher/Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: researcher-agent:0.1.0
+  triggers: []

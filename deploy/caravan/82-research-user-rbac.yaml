@@ -1,0 +1,46 @@
+# Lets the HTPasswd research users run the researcher agent. It does not
+# grant secret access or any permission in the finops namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tokenomics-researcher
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: researcher
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tokenomics-researcher
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: researcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tokenomics-researcher
+subjects:
+  - kind: User
+    name: nora
+    apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: owen
+    apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: priya
+    apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: samir
+    apiGroup: rbac.authorization.k8s.io

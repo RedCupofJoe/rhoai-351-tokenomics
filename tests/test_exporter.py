@@ -38,8 +38,8 @@ def test_metrics_exposition_uses_requested_labels(tmp_path: Path) -> None:
     recorder = Recorder(Checkpoint(tmp_path / "metrics.db"), metrics)
     recorder.record(UsageEvent("evt-2", "alice", "gemma-4", {"input": 5, "cache": 0, "decoded": 2}, "push"))
     body = generate_latest(metrics.registry).decode()
-    assert 'maas_user_token_usage_total{model="gemma-4",namespace="unknown",token_type="input",user="alice"} 5.0' in body
-    assert 'maas_user_token_usage_total{model="gemma-4",namespace="unknown",token_type="decoded",user="alice"} 2.0' in body
+    assert 'maas_user_token_usage_total{model="gemma-4",project="unknown",token_type="input",user="alice"} 5.0' in body
+    assert 'maas_user_token_usage_total{model="gemma-4",project="unknown",token_type="decoded",user="alice"} 2.0' in body
     assert "token_type=\"cache\"" not in body
 
 
@@ -166,6 +166,6 @@ def test_push_endpoint_rejects_missing_token_and_counts_once(tmp_path: Path) -> 
     assert body == {"accepted": 1, "duplicates": 0}
     metrics_body = urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=2).read().decode()
     assert 'user="alice"' in metrics_body
-    assert 'namespace="models-as-a-service"' in metrics_body
+    assert 'project="models-as-a-service"' in metrics_body
     server.shutdown()
     checkpoint.close()

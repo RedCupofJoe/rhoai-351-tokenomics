@@ -1,0 +1,6 @@
+# Phase 5 merge patch. This is the only DataScienceCluster component state
+# this repository sets.
+spec:
+  components:
+    mcplifecycleoperator:
+      managementState: Managed

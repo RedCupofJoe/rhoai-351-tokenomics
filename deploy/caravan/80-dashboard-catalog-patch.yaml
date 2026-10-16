@@ -1,0 +1,5 @@
+# Phase 5 merge patch. Leaves every other dashboard flag unchanged.
+spec:
+  dashboardConfig:
+    agentsCatalog: true
+    mcpCatalog: true

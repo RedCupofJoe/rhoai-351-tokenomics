@@ -1,0 +1,140 @@
+source: Research
+mcp_servers:
+  - name: fetch
+    provider: Stacklok
+    license: Apache-2.0
+    description: Fetches a public web page and extracts its text. No API key.
+    readme: |
+      Streamable HTTP fetch server. Tool `fetch` takes a URL and returns the page text.
+      The container listens on port 8080 at `/mcp`.
+    version: latest
+    transports:
+      - streamable-http
+    documentationUrl: https://github.com/stackloklabs/gofetch
+    repositoryUrl: https://github.com/stackloklabs/gofetch
+    deploymentMode: local
+    tags:
+      - research
+      - fetch
+    endpoints:
+      http: http://fetch-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+    tools:
+      - name: fetch
+        description: Fetch a URL and extract its contents as text.
+        accessType: read_only
+        parameters:
+          - name: url
+            type: string
+            description: The URL to fetch.
+            required: true
+          - name: max_length
+            type: integer
+            description: Maximum number of characters to return.
+            required: false
+    artifacts:
+      - name: container
+        uri: oci://ghcr.io/stackloklabs/gofetch/server:latest
+        type: container
+  - name: wikipedia
+    provider: cyanheads
+    license: Apache-2.0
+    description: Searches Wikipedia and reads article text. No API key.
+    readme: |
+      Wikipedia MCP server over streamable HTTP on port 8080 at `/mcp`.
+      Tools search articles, read summaries, and read sections.
+    version: latest
+    transports:
+      - streamable-http
+    documentationUrl: https://github.com/cyanheads/wikipedia-mcp-server
+    repositoryUrl: https://github.com/cyanheads/wikipedia-mcp-server
+    deploymentMode: local
+    tags:
+      - research
+      - wikipedia
+    endpoints:
+      http: http://wikipedia-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+    tools:
+      - name: wikipedia_search_articles
+        description: Full-text search across Wikipedia.
+        accessType: read_only
+        parameters:
+          - name: query
+            type: string
+            description: Search text.
+            required: true
+          - name: limit
+            type: integer
+            description: Maximum results, from 1 to 50.
+            required: false
+      - name: wikipedia_get_summary
+        description: Short summary for an article title.
+        accessType: read_only
+        parameters:
+          - name: title
+            type: string
+            description: Article title.
+            required: true
+      - name: wikipedia_get_article
+        description: Full article text or one section.
+        accessType: read_only
+        parameters:
+          - name: title
+            type: string
+            description: Article title.
+            required: true
+    artifacts:
+      - name: container
+        uri: oci://ghcr.io/cyanheads/wikipedia-mcp-server:latest
+        type: container
+  - name: arxiv
+    provider: cyanheads
+    license: Apache-2.0
+    description: Searches arXiv and reads paper metadata and text. No API key.
+    readme: |
+      arXiv MCP server over streamable HTTP on port 8080 at `/mcp`.
+      The published `docker.io/mcp/arxiv-mcp-server` image speaks stdio only,
+      so this catalog uses the HTTP image the cluster can pull.
+    version: latest
+    transports:
+      - streamable-http
+    documentationUrl: https://github.com/cyanheads/arxiv-mcp-server
+    repositoryUrl: https://github.com/cyanheads/arxiv-mcp-server
+    deploymentMode: local
+    tags:
+      - research
+      - arxiv
+    endpoints:
+      http: http://arxiv-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+    tools:
+      - name: arxiv_search
+        description: Search arXiv papers by query, category, and date.
+        accessType: read_only
+        parameters:
+          - name: query
+            type: string
+            description: "Search query. Field prefixes such as ti and au are accepted."
+            required: true
+          - name: max_results
+            type: integer
+            description: Maximum results, up to 50.
+            required: false
+      - name: arxiv_get_metadata
+        description: Fetch metadata for one or more arXiv IDs.
+        accessType: read_only
+        parameters:
+          - name: paper_ids
+            type: array
+            description: arXiv paper IDs.
+            required: true
+      - name: arxiv_read_paper
+        description: Read paper text from HTML or PDF.
+        accessType: read_only
+        parameters:
+          - name: paper_id
+            type: string
+            description: arXiv paper ID.
+            required: true
+    artifacts:
+      - name: container
+        uri: oci://ghcr.io/cyanheads/arxiv-mcp-server:latest
+        type: container

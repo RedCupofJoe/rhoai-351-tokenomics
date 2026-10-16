@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: researcher-agent
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app: researcher-agent
+    app.kubernetes.io/name: researcher-agent
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: agent
+  annotations:
+    openshift.io/display-name: researcher agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: researcher-agent
+  template:
+    metadata:
+      labels:
+        app: researcher-agent
+        app.kubernetes.io/name: researcher-agent
+        app.kubernetes.io/part-of: caravan
+        app.kubernetes.io/component: agent
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: researcher-agent
+          image: __RESEARCHER_IMAGE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: AGENT_URL
+              value: http://researcher-agent.__CARAVAN_NAMESPACE__.svc.cluster.local:8080
+            - name: OPENAI_BASE_URL
+              value: __OPENAI_BASE_URL__
+            - name: OPENAI_MODEL
+              value: __RESEARCHER_MODEL__
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ojoseph-test-agent-secret
+                  key: OPENAI_API_KEY
+            - name: MCP_FETCH_URL
+              value: http://fetch-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+            - name: MCP_WIKIPEDIA_URL
+              value: http://wikipedia-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+            - name: MCP_ARXIV_URL
+              value: http://arxiv-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: researcher-agent
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app: researcher-agent
+    app.kubernetes.io/name: researcher-agent
+    app.kubernetes.io/part-of: caravan
+spec:
+  selector:
+    app: researcher-agent
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

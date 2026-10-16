@@ -55,7 +55,7 @@ def aggregate_series(series: list[dict], rates_per_token: dict[str, float], curr
     for item in series:
         metric = item.get("metric") or {}
         user = str(metric.get("user") or "unknown")
-        namespace = str(metric.get("namespace") or "unknown")
+        namespace = str(metric.get("project") or metric.get("namespace") or "unknown")
         model = str(metric.get("model") or "unknown")
         token_type = str(metric.get("token_type") or "")
         if token_type not in TOKEN_TYPES:

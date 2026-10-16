@@ -11,13 +11,13 @@ class Metrics:
         self.tokens = Counter(
             "maas_user_token_usage",
             "Tokens attributed to a user. token_type is input, cache, or decoded.",
-            ["user", "namespace", "token_type", "model"],
+            ["user", "project", "token_type", "model"],
             registry=self.registry,
         )
         self.requests = Counter(
             "maas_user_requests",
             "Usage events accepted by the tokenomics exporter.",
-            ["user", "namespace", "model", "source"],
+            ["user", "project", "model", "source"],
             registry=self.registry,
         )
         self.events = Counter(

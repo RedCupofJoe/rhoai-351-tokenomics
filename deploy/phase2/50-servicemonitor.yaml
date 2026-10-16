@@ -21,3 +21,6 @@ spec:
       path: /metrics
       interval: 30s
       scheme: http
+      # Keep labels the exporter sets. OpenShift still writes its own namespace
+      # label for the scrape target, so the usage project is the project label.
+      honorLabels: true

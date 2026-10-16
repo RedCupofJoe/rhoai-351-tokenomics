@@ -20,8 +20,10 @@ PLACEHOLDERS = {
     "__CARAVAN_AGENT_IMAGE__": "registry.example/caravan-agent:dev1",
     "__CARAVAN_BASE_IMAGE__": "image-registry.example/openshift/python:3.12-ubi9",
     "__OPENWEBUI_IMAGE__": "registry.example/open-webui:0.1.0",
+    "__RESEARCHER_IMAGE__": "registry.example/researcher-agent:0.1.0",
     "__OPENAI_BASE_URL__": "https://maas.example/v1",
     "__OPENAI_MODEL__": "example-model",
+    "__RESEARCHER_MODEL__": "example-researcher-model",
 }
 
 
@@ -104,6 +106,7 @@ def test_images_are_built_from_ubi_containerfiles() -> None:
         ROOT / "ui/Containerfile",
         ROOT / "grafana/Containerfile",
         ROOT / "openwebui/Containerfile",
+        ROOT / "researcher/Containerfile",
     ]
     for path in containerfiles:
         first = next(line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("FROM "))
@@ -163,6 +166,7 @@ def test_servicemonitor_matches_exporter_service() -> None:
     assert match.items() <= labels.items()
     assert monitor["spec"]["namespaceSelector"]["matchNames"] == [service["metadata"]["namespace"]]
     assert monitor["spec"]["endpoints"][0]["port"] == "metrics"
+    assert monitor["spec"]["endpoints"][0]["honorLabels"] is True
     assert any(port["name"] == "metrics" for port in service["spec"]["ports"])
 
 
@@ -217,3 +221,62 @@ def test_deploy_script_renders_without_placeholders() -> None:
     assert "kind: Namespace" in completed.stdout
     assert "kind: ServiceMonitor" in completed.stdout
     assert "kind: Route" in completed.stdout
+    assert "kind: MCPServer" in completed.stdout
+
+
+def test_phase5_enables_catalogs_and_the_mcp_operator() -> None:
+    script = (ROOT / "deploy.sh").read_text(encoding="utf-8")
+    assert "phases=(1 2 3 4)" in script
+    dashboard = next(
+        yaml.safe_load_all((ROOT / "deploy/caravan/80-dashboard-catalog-patch.yaml").read_text(encoding="utf-8"))
+    )
+    flags = dashboard["spec"]["dashboardConfig"]
+    assert flags["agentsCatalog"] is True
+    assert flags["mcpCatalog"] is True
+    dsc = next(yaml.safe_load_all((ROOT / "deploy/caravan/81-dsc-mcp-operator-patch.yaml").read_text(encoding="utf-8")))
+    components = dsc["spec"]["components"]
+    assert list(components) == ["mcplifecycleoperator"]
+    assert components["mcplifecycleoperator"]["managementState"] == "Managed"
+    assert "80-dashboard-catalog-patch.yaml" in script
+    assert "81-dsc-mcp-operator-patch.yaml" in script
+    assert "mcplifecycleoperator" in (ROOT / "MAAS_MODIFICATIONS.md").read_text(encoding="utf-8")
+
+
+def test_research_catalog_and_agent_manifests() -> None:
+    mcp = yaml.safe_load((ROOT / "catalog/research-mcp.yaml").read_text(encoding="utf-8"))
+    names = {item["name"] for item in mcp["mcp_servers"]}
+    assert names == {"fetch", "wikipedia", "arxiv"}
+    uris = {artifact["uri"] for item in mcp["mcp_servers"] for artifact in item["artifacts"]}
+    assert "oci://ghcr.io/stackloklabs/gofetch/server:latest" in uris
+    assert "oci://ghcr.io/cyanheads/wikipedia-mcp-server:latest" in uris
+    assert "oci://ghcr.io/cyanheads/arxiv-mcp-server:latest" in uris
+    sources = yaml.safe_load((ROOT / "catalog/mcp-sources.yaml").read_text(encoding="utf-8"))
+    assert sources["mcp_catalogs"][0]["enabled"] is True
+    assert sources["mcp_catalogs"][0]["properties"]["yamlCatalogPath"] == "research-mcp.yaml"
+    agent_sources = yaml.safe_load((ROOT / "catalog/agent-sources.yaml").read_text(encoding="utf-8"))
+    assert agent_sources["agent_catalogs"][0]["enabled"] is True
+    agent = yaml.safe_load((ROOT / "catalog/researcher-agent.yaml").read_text(encoding="utf-8"))
+    assert agent["agents"][0]["displayName"] == "researcher agent"
+    assert agent["agents"][0]["framework"] == "python"
+    servers = list(
+        yaml.safe_load_all(render((ROOT / "deploy/caravan/37-research-mcp.yaml").read_text(encoding="utf-8")))
+    )
+    assert [item["metadata"]["name"] for item in servers] == ["fetch-mcp", "wikipedia-mcp", "arxiv-mcp"]
+    assert all(item["spec"]["config"]["port"] == 8080 for item in servers)
+    researcher = next(
+        yaml.safe_load_all(render((ROOT / "deploy/caravan/36-researcher-agent.yaml").read_text(encoding="utf-8")))
+    )
+    assert researcher["metadata"]["annotations"]["openshift.io/display-name"] == "researcher agent"
+    container = researcher["spec"]["template"]["spec"]["containers"][0]
+    assert container["image"] == "registry.example/researcher-agent:0.1.0"
+    assert researcher["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/component"] == "agent"
+    key = container["env"][-4]["valueFrom"]["secretKeyRef"]
+    assert key == {"name": "ojoseph-test-agent-secret", "key": "OPENAI_API_KEY"}
+    policy = next(yaml.safe_load_all(render((ROOT / "deploy/caravan/70-networkpolicy.yaml").read_text(encoding="utf-8"))))
+    ports = {port["port"] for rule in policy["spec"]["egress"] for port in rule["ports"]}
+    assert {53, 443, 6443, 8080} <= ports
+    source = (ROOT / "researcher/app.py").read_text(encoding="utf-8")
+    assert "/healthz" in source
+    assert "/.well-known/agent-card.json" in source
+    assert '"researcher agent"' in source
+    assert "OPENAI_API_KEY=" not in (ROOT / "deploy/caravan/36-researcher-agent.yaml").read_text(encoding="utf-8")

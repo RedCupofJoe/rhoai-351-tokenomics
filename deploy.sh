@@ -16,8 +16,13 @@ CARAVAN_NAMESPACE="${CARAVAN_NAMESPACE:-test-project}"
 CARAVAN_AGENT_IMAGE="${CARAVAN_AGENT_IMAGE:-registry.custom.mirror/caravan-agent:dev1}"
 CARAVAN_BASE_IMAGE="${CARAVAN_BASE_IMAGE:-image-registry.openshift-image-registry.svc:5000/openshift/python:3.12-ubi9}"
 OPENWEBUI_IMAGE="${OPENWEBUI_IMAGE:-image-registry.openshift-image-registry.svc:5000/${CARAVAN_NAMESPACE}/open-webui:0.1.0}"
+RESEARCHER_IMAGE="${RESEARCHER_IMAGE:-image-registry.openshift-image-registry.svc:5000/${CARAVAN_NAMESPACE}/researcher-agent:0.1.0}"
+DSC_NAME="${DSC_NAME:-default-dsc}"
+MODEL_REGISTRY_NAMESPACE="${MODEL_REGISTRY_NAMESPACE:-rhoai-model-registries}"
 OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://maas.apps.ocp.tlphn.sandbox983.opentlc.com/v1}"
 OPENAI_MODEL="${OPENAI_MODEL:-publishers/llm/models/gemma-2-9b-it}"
+# The existing test-project key is subscribed to gpt-oss-20b. Gemma returns 403 for that key.
+RESEARCHER_MODEL="${RESEARCHER_MODEL:-publishers/llm/models/gpt-oss-20b}"
 MAAS_NAMESPACE="${MAAS_NAMESPACE:-models-as-a-service}"
 GRAFANA_LABEL="${GRAFANA_LABEL:-grafana}"
 PERSES_DATASOURCE="${PERSES_DATASOURCE:-data-science-prometheus-datasource}"
@@ -44,8 +49,10 @@ render() {
     -e "s|__CARAVAN_AGENT_IMAGE__|${CARAVAN_AGENT_IMAGE}|g" \
     -e "s|__CARAVAN_BASE_IMAGE__|${CARAVAN_BASE_IMAGE}|g" \
     -e "s|__OPENWEBUI_IMAGE__|${OPENWEBUI_IMAGE}|g" \
+    -e "s|__RESEARCHER_IMAGE__|${RESEARCHER_IMAGE}|g" \
     -e "s|__OPENAI_BASE_URL__|${OPENAI_BASE_URL}|g" \
     -e "s|__OPENAI_MODEL__|${OPENAI_MODEL}|g" \
+    -e "s|__RESEARCHER_MODEL__|${RESEARCHER_MODEL}|g" \
     "$1"
 }
 
@@ -307,6 +314,100 @@ ensure_named_secret() {
   echo "Created ${namespace}/${name}."
 }
 
+wait_for_mcp_crd() {
+  echo "Waiting for MCPServer CRD"
+  local _i
+  for _i in $(seq 1 60); do
+    if oc get crd mcpservers.mcp.x-k8s.io >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 3
+  done
+  echo "MCPServer CRD did not appear. The MCP Lifecycle Operator is still starting." >&2
+  exit 1
+}
+
+patch_catalog_configmap() {
+  local name="$1"
+  shift
+  local patch
+  patch="$(mktemp)"
+  python3 - "$patch" "${CARAVAN_NAMESPACE}" "$@" <<'PY'
+import json
+import pathlib
+import sys
+
+out = pathlib.Path(sys.argv[1])
+namespace = sys.argv[2]
+data = {}
+args = sys.argv[3:]
+for index in range(0, len(args), 2):
+    key, path = args[index], args[index + 1]
+    text = pathlib.Path(path).read_text(encoding="utf-8")
+    data[key] = text.replace("__CARAVAN_NAMESPACE__", namespace)
+out.write_text(json.dumps({"data": data}), encoding="utf-8")
+PY
+  echo "Patching configmap ${MODEL_REGISTRY_NAMESPACE}/${name}"
+  oc -n "${MODEL_REGISTRY_NAMESPACE}" patch configmap "$name" --type merge --patch-file "$patch"
+  rm -f "$patch"
+}
+
+catalog_lists_name() {
+  local path="$1"
+  oc -n "${MODEL_REGISTRY_NAMESPACE}" exec deploy/model-catalog -c catalog -- \
+    curl -sf -m 15 "http://127.0.0.1:8080${path}" | grep -q '"name"'
+}
+
+catalog_is_serving_research() {
+  catalog_lists_name "/api/mcp_catalog/v1alpha1/mcp_servers?name=wikipedia" \
+    && catalog_lists_name "/api/agent_catalog/v1alpha1/agents?name=researcher-agent"
+}
+
+wait_for_research_catalog() {
+  local _i
+  for _i in $(seq 1 18); do
+    if catalog_is_serving_research; then
+      echo "Model catalog is serving the Research sources."
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
+
+reload_catalog_if_needed() {
+  # Leadership can take about a minute after a rollout. Restart only if the
+  # sources are still absent, then clear a stale catalog-leader row if the
+  # new pod cannot take the lock left by the pod that just exited.
+  if wait_for_research_catalog; then
+    return 0
+  fi
+  echo "Model catalog did not reload the Research sources. Restarting model-catalog."
+  oc -n "${MODEL_REGISTRY_NAMESPACE}" rollout restart deploy/model-catalog
+  oc -n "${MODEL_REGISTRY_NAMESPACE}" rollout status deploy/model-catalog --timeout=300s
+  if wait_for_research_catalog; then
+    return 0
+  fi
+  echo "Clearing a stale catalog-leader lock so the catalog pod can load the sources."
+  oc -n "${MODEL_REGISTRY_NAMESPACE}" exec deploy/model-catalog-postgres -- \
+    psql -U postgres -d model_catalog -c "delete from locks where name = 'catalog-leader';"
+  if wait_for_research_catalog; then
+    return 0
+  fi
+  echo "Model catalog is not serving the Research sources." >&2
+  exit 1
+}
+
+ensure_researcher_image() {
+  apply_file "${ROOT}/deploy/build/researcher-build.yaml"
+  if [[ "${REBUILD_RESEARCHER:-false}" != "true" ]] && oc -n "${CARAVAN_NAMESPACE}" get imagestreamtag researcher-agent:0.1.0 >/dev/null 2>&1; then
+    echo "Researcher image ${RESEARCHER_IMAGE} already exists."
+    return 0
+  fi
+  echo "Building researcher agent from researcher/Containerfile (UBI 9 Python)."
+  oc -n "${CARAVAN_NAMESPACE}" start-build researcher-agent --from-dir="${ROOT}" --follow
+}
+
 ensure_openwebui_image() {
   apply_file "${ROOT}/deploy/build/openwebui-build.yaml"
   if [[ "${REBUILD_OPENWEBUI:-false}" != "true" ]] && oc -n "${CARAVAN_NAMESPACE}" get imagestreamtag open-webui:0.1.0 >/dev/null 2>&1; then
@@ -331,6 +432,9 @@ phase4() {
 }
 
 phase5() {
+  merge_patch "odhdashboardconfig/odh-dashboard-config" "${ROOT}/deploy/caravan/80-dashboard-catalog-patch.yaml" -n "${APPLICATIONS_NAMESPACE}"
+  merge_patch "datasciencecluster/${DSC_NAME}" "${ROOT}/deploy/caravan/81-dsc-mcp-operator-patch.yaml"
+  wait_for_mcp_crd
   apply_file "${ROOT}/deploy/caravan/00-namespace.yaml"
   apply_file "${ROOT}/deploy/caravan/10-serviceaccount.yaml"
   apply_file "${ROOT}/deploy/caravan/20-pvc.yaml"
@@ -349,7 +453,17 @@ phase5() {
   apply_file "${ROOT}/deploy/caravan/50-service.yaml"
   apply_file "${ROOT}/deploy/caravan/60-route.yaml"
   ensure_openwebui_image
+  ensure_researcher_image
   apply_file "${ROOT}/deploy/caravan/35-ojoseph-test-agent.yaml"
+  apply_file "${ROOT}/deploy/caravan/36-researcher-agent.yaml"
+  apply_file "${ROOT}/deploy/caravan/37-research-mcp.yaml"
+  patch_catalog_configmap mcp-catalog-sources \
+    sources.yaml "${ROOT}/catalog/mcp-sources.yaml" \
+    research-mcp.yaml "${ROOT}/catalog/research-mcp.yaml"
+  patch_catalog_configmap agent-catalog-sources \
+    sources.yaml "${ROOT}/catalog/agent-sources.yaml" \
+    researcher-agent.yaml "${ROOT}/catalog/researcher-agent.yaml"
+  reload_catalog_if_needed
   oc -n "${CARAVAN_NAMESPACE}" delete deployment caravan-agent caravan-agent-ubi --ignore-not-found
   oc -n "${CARAVAN_NAMESPACE}" delete networkpolicy caravan-agent --ignore-not-found
   apply_file "${ROOT}/deploy/caravan/40-open-webui.yaml"
@@ -406,7 +520,7 @@ Phases:
   2  Exporter Deployment, Service, ServiceMonitor
   3  Grafana operator, UBI Grafana instance, Thanos datasource, dashboard, and Perses when that CRD exists
   4  Pricing UI, OpenShift login proxy, Service, and Route in ${UI_NAMESPACE}
-  5  Caravan agent and Open WebUI in ${CARAVAN_NAMESPACE}, with an OpenShift login sidecar
+  5  Caravan agent, researcher agent, research MCP servers, and the Agent and MCP catalogs in ${CARAVAN_NAMESPACE}
 
 With no arguments, phases run in order 1 2 3 4. Phase 5 is separate.
   ./deploy.sh undeploy          Remove the tokenomics extension. Does not delete MaaS workloads.

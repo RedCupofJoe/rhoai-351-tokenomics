@@ -1,0 +1,158 @@
+# Keyless research MCP servers. Images were confirmed pullable for linux/amd64.
+# docker.io/mcp/wikipedia:latest does not exist. docker.io/mcp/arxiv-mcp-server:latest
+# is a stdio process, so arXiv uses the HTTP image that the cluster can pull.
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: fetch-mcp
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: mcp-server
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: ghcr.io/stackloklabs/gofetch/server:latest
+  config:
+    port: 8080
+    path: /mcp
+  runtime:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    security:
+      podSecurityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities:
+          drop: ["ALL"]
+---
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: wikipedia-mcp
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: mcp-server
+spec:
+  mcp:
+    stateless: true
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: ghcr.io/cyanheads/wikipedia-mcp-server:latest
+  config:
+    port: 8080
+    path: /mcp
+    env:
+      - name: MCP_TRANSPORT_TYPE
+        value: http
+      - name: MCP_HTTP_HOST
+        value: 0.0.0.0
+      - name: MCP_HTTP_PORT
+        value: "8080"
+      - name: MCP_SESSION_MODE
+        value: stateless
+      - name: MCP_AUTH_MODE
+        value: none
+      - name: HOME
+        value: /tmp
+    storage:
+      - path: /tmp
+        source:
+          type: EmptyDir
+          emptyDir: {}
+      - path: /var/log/wikipedia-mcp-server
+        source:
+          type: EmptyDir
+          emptyDir: {}
+  runtime:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    security:
+      podSecurityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities:
+          drop: ["ALL"]
+---
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: arxiv-mcp
+  namespace: __CARAVAN_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: caravan
+    app.kubernetes.io/component: mcp-server
+spec:
+  mcp:
+    stateless: true
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: ghcr.io/cyanheads/arxiv-mcp-server:latest
+  config:
+    port: 8080
+    path: /mcp
+    env:
+      - name: MCP_TRANSPORT_TYPE
+        value: http
+      - name: MCP_HTTP_HOST
+        value: 0.0.0.0
+      - name: MCP_HTTP_PORT
+        value: "8080"
+      - name: MCP_SESSION_MODE
+        value: stateless
+      - name: MCP_AUTH_MODE
+        value: none
+      - name: HOME
+        value: /tmp
+    storage:
+      - path: /tmp
+        source:
+          type: EmptyDir
+          emptyDir: {}
+      - path: /var/log/arxiv-mcp-server
+        source:
+          type: EmptyDir
+          emptyDir: {}
+  runtime:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    security:
+      podSecurityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities:
+          drop: ["ALL"]

@@ -119,8 +119,7 @@ def create_app(
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         report = aggregate_series(series, pricing["rates"], pricing["currency"], span)
         report["attribution"] = attribution
-        if attribution == "model":
-            report = drop_empty_rows(report)
+        report = drop_empty_rows(report)
         report = scope_report(report, principal.name, principal.admin)
         report["demo"] = demo
         return report

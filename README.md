@@ -78,13 +78,13 @@ These are not Red Hat OpenShift or OpenShift AI components:
 ## Metrics
 
 ```text
-maas_user_token_usage_total{user, token_type, model}
-maas_user_requests_total{user, model, source}
+maas_user_token_usage_total{user, project, token_type, model}
+maas_user_requests_total{user, project, model, source}
 ```
 
-`token_type` is `input`, `cache`, or `decoded`. `model` is an extra label. Sum it away when you only need the user.
+`token_type` is `input`, `cache`, or `decoded`. `project` is the OpenShift project on the usage event. `model` is an extra label. Sum either away when you only need the user.
 
-User-workload monitoring scrapes the ServiceMonitor. The pricing UI reads those series from Thanos Querier. When the exporter series is empty, the page uses the model-server counters `kserve_vllm:prompt_tokens_by_source_total` and `kserve_vllm:generation_tokens_total` and labels the rows `all-callers`. Counters reset when the exporter restarts; Prometheus and the UI treat a reset as a new baseline. A persistent checkpoint stops the process from counting the same event twice after a restart.
+User-workload monitoring scrapes the ServiceMonitor. The pricing UI reads those series from Thanos Querier. When the exporter series is empty, the page uses the model-server counters `kserve_vllm:prompt_tokens_by_source_total` and `kserve_vllm:generation_tokens_total` and labels the rows `all-callers`. The page draws that visible mix as a pie and follows the Red Hat light and dark colorway. Counters reset when the exporter restarts; Prometheus and the UI treat a reset as a new baseline. A persistent checkpoint stops the process from counting the same event twice after a restart.
 
 Showback covers usage observed between the first and last scrape in the selected span. It does not invent tokens from before the exporter existed.
 
@@ -114,6 +114,10 @@ Or run `./scripts/enable-user-workload-monitoring.sh`, which creates the ConfigM
 ```
 
 Phase 5 is separate. It creates the `test-project` namespace, builds Open WebUI from `openwebui/Containerfile` (UBI 9 Python), and deploys Open WebUI plus `ojoseph-test-agent`. That agent uses the cluster imagestream `openshift/python:3.12-ubi9`. Open WebUI listens on `127.0.0.1` and the OpenShift `oauth-proxy` sidecar is the login. Set `OPENAI_API_KEY` in the environment before the first run; the key is stored in `ojoseph-test-agent-secret` and is not committed. Open WebUI reads that secret and `OPENAI_BASE_URL` on every start. The default endpoint is this cluster’s MaaS gateway, which lists `publishers/llm/models/gemma-2-9b-it`.
+
+Phase 5 also turns on the Agent Catalog and MCP Catalog, sets the MCP Lifecycle Operator to `Managed`, and deploys `researcher-agent` beside three keyless research MCP servers (web fetch, Wikipedia, and arXiv). The researcher image is built from `researcher/Containerfile`. Both catalogs list that agent and those servers. `RESEARCHER_MODEL` defaults to `publishers/llm/models/gpt-oss-20b`, which is the model on the existing key's subscription.
+
+`scripts/create_htpasswd_users.sh` adds the `tokenomics-htpasswd` identity provider beside the existing `rhbk` provider and logs in nora, owen, priya, and samir so those OpenShift users exist. `scripts/impersonate_research_users.py` then asks a different multi-part research question with `oc --as` that user. Each question searches Wikipedia and arXiv, reads the named article or paper, fetches the source pages, and the script records the gateway token counts on the pricing page under the OpenShift username.
 
 ```bash
 export OPENAI_API_KEY=...

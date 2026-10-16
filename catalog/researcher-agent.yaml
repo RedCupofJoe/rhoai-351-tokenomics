@@ -1,0 +1,36 @@
+source: Research
+agents:
+  - name: researcher-agent
+    displayName: researcher agent
+    description: Looks up web pages, Wikipedia, and arXiv through MCP, then answers through the MaaS gateway.
+    readme: |
+      # researcher agent
+
+      A Python service in the same namespace as the research MCP servers.
+      It calls web fetch, Wikipedia, and arXiv over streamable HTTP, then
+      sends the notes to the cluster MaaS gateway.
+
+      `GET /healthz` reports process health. `GET /.well-known/agent-card.json`
+      publishes the name `researcher agent`. `POST /research` with
+      `{"query": "..."}` runs a lookup.
+    repositoryUrl: ""
+    framework: python
+    labels:
+      - research
+    logo: ""
+    env:
+      - name: OPENAI_API_KEY
+        required: true
+      - name: OPENAI_BASE_URL
+        required: true
+      - name: OPENAI_MODEL
+        required: true
+      - name: MCP_FETCH_URL
+        required: true
+      - name: MCP_WIKIPEDIA_URL
+        required: true
+      - name: MCP_ARXIV_URL
+        required: true
+    templates:
+      - name: agent.yaml
+        content: '{"name":"researcher-agent","displayName":"researcher agent","framework":"python"}'

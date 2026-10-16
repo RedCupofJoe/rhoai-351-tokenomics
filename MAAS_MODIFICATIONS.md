@@ -1,6 +1,6 @@
 # MaaS modifications
 
-`deploy.sh` does not change Models-as-a-Service workloads. It does not edit `DataScienceCluster`, `DataScienceClusterInitialization`, `OdhDashboardConfig`, Gateway, Authorino, Limitador, llm-d, or any Deployment in `redhat-ods-applications`.
+`deploy.sh` does not change Models-as-a-Service workloads, Gateway, Authorino, Limitador, llm-d, or any Deployment in `redhat-ods-applications`. Phase 3 merge-patches `DataScienceClusterInitialization` monitoring and sets `OdhDashboardConfig` `observabilityDashboard`. Phase 5 is not part of the default run. It sets `OdhDashboardConfig` `agentsCatalog` and `mcpCatalog` to true, and sets `DataScienceCluster` component `mcplifecycleoperator` to `Managed`. That is the only component management state this repository sets.
 
 The sections below are the only optional changes. Each one is off unless you run the command yourself.
 
@@ -28,6 +28,8 @@ These are new objects. They are not patches of existing MaaS objects.
 | 4 | Service CA ConfigMap, PVC, Secrets, Deployment with an `oauth-proxy` sidecar, Service, reencrypt Route, NetworkPolicy | `maas-finops-ui` |
 
 Phase 3 does not modify `dashboard-3-maas-usage-admin` or any other dashboard. If `redhat-ods-monitoring` is absent, phase 3 stops and tells you to set `OBS_NAMESPACE`. It will not create that namespace.
+
+Phase 5 (`./deploy.sh 5`) merge-patches `OdhDashboardConfig` `odh-dashboard-config` so `spec.dashboardConfig.agentsCatalog` and `spec.dashboardConfig.mcpCatalog` are true. It merge-patches `DataScienceCluster` `default-dsc` so `spec.components.mcplifecycleoperator.managementState` is `Managed`, and leaves every other component state alone. It then registers the Research source on `mcp-catalog-sources` and `agent-catalog-sources` in `rhoai-model-registries` by patching ConfigMap data only, so the operator labels stay in place.
 
 The pricing UI is not registered with the RHOAI dashboard module federation. That registration would change `rhods-dashboard` in `redhat-ods-applications`. This project uses a Route in `maas-finops-ui` instead. The Route sits behind OpenShift login. A signed-in user sees only their own usage and cannot change prices. An OpenShift AI administrator, a member of `rhods-admins` or `system:cluster-admins`, sees cluster-wide usage and can set per-token rates.
 
@@ -102,7 +104,7 @@ The script adds `--enable-force-include-usage` and `--enable-prompt-tokens-detai
 ## 5. What this project will not change for you
 
 - No sidecar is added to MaaS, gateway, or model pods. The vLLM usage-flag script above is the only change to a model template, and only when you run it.
-- No `DataScienceCluster` component management state is changed. Phase 3 sets `DSCInitialization` `spec.monitoring` for metrics, alerting, and traces. It does not set external metrics exporters.
+- The only `DataScienceCluster` component management state this repository sets is `mcplifecycleoperator: Managed`, and only when phase 5 runs. Phase 3 sets `DSCInitialization` `spec.monitoring` for metrics, alerting, and traces. It does not set external metrics exporters.
 - No OpenTelemetry Collector config is rewritten.
 - No Limitador `TokenRateLimitPolicy` or TelemetryPolicy is edited. `authorized_hits` stays the combined gateway total.
 - User-workload monitoring is required for the ServiceMonitor and is not enabled by `deploy.sh`. A cluster administrator turns it on with `./scripts/enable-user-workload-monitoring.sh`. That edits `cluster-monitoring-config` in `openshift-monitoring`.

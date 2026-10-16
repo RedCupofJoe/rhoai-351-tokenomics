@@ -1,4 +1,8 @@
 const spans = document.querySelectorAll("[data-span]");
+const themeToggle = document.getElementById("theme-toggle");
+const tokenPie = document.getElementById("token-pie");
+const pieDesc = document.getElementById("pie-desc");
+const pieLegend = document.getElementById("pie-legend");
 const login = document.getElementById("login");
 const app = document.getElementById("app");
 const loginError = document.getElementById("login-error");
@@ -124,6 +128,79 @@ function tokens(value) {
   return new Intl.NumberFormat().format(value);
 }
 
+const SLICE_COLORS = {
+  input: "var(--slice-input)",
+  cache: "var(--slice-cache)",
+  decoded: "var(--slice-decoded)",
+};
+
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  themeToggle.setAttribute("aria-pressed", dark ? "true" : "false");
+  themeToggle.textContent = dark ? "Light mode" : "Dark mode";
+  localStorage.setItem("tokenomicsTheme", dark ? "dark" : "light");
+}
+
+function initialTheme() {
+  const stored = localStorage.getItem("tokenomicsTheme");
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function piePath(start, end) {
+  const large = end - start > Math.PI ? 1 : 0;
+  const x1 = 60 + 52 * Math.sin(start);
+  const y1 = 60 - 52 * Math.cos(start);
+  const x2 = 60 + 52 * Math.sin(end);
+  const y2 = 60 - 52 * Math.cos(end);
+  return "M 60 60 L " + x1 + " " + y1 + " A 52 52 0 " + large + " 1 " + x2 + " " + y2 + " Z";
+}
+
+function renderPie(totalTokens) {
+  const parts = [
+    { key: "input", label: "Input", value: totalTokens.input },
+    { key: "cache", label: "Cache", value: totalTokens.cache },
+    { key: "decoded", label: "Decoded", value: totalTokens.decoded },
+  ];
+  const total = parts.reduce((sum, part) => sum + part.value, 0);
+  tokenPie.replaceChildren();
+  pieLegend.replaceChildren();
+  if (total <= 0) {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", "60");
+    circle.setAttribute("cy", "60");
+    circle.setAttribute("r", "52");
+    circle.setAttribute("fill", "var(--empty-slice)");
+    tokenPie.appendChild(circle);
+    pieDesc.textContent = "No tokens in this view.";
+    return;
+  }
+  let cursor = 0;
+  for (const part of parts) {
+    if (part.value <= 0) continue;
+    const sweep = (part.value / total) * Math.PI * 2;
+    const shape = document.createElementNS("http://www.w3.org/2000/svg", part.value === total ? "circle" : "path");
+    if (part.value === total) {
+      shape.setAttribute("cx", "60");
+      shape.setAttribute("cy", "60");
+      shape.setAttribute("r", "52");
+    } else {
+      shape.setAttribute("d", piePath(cursor, cursor + sweep));
+    }
+    shape.setAttribute("fill", SLICE_COLORS[part.key]);
+    tokenPie.appendChild(shape);
+    cursor += sweep;
+    const item = document.createElement("li");
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.style.background = SLICE_COLORS[part.key];
+    item.append(swatch, document.createTextNode(part.label + " · " + tokens(part.value) + " · " + Math.round((part.value / total) * 100) + "%"));
+    pieLegend.appendChild(item);
+  }
+  pieDesc.textContent = tokens(total) + " tokens across input, cache, and decoded.";
+}
+
 function fillSelect(select, values, current) {
   const options = [""].concat(values);
   select.replaceChildren();
@@ -221,6 +298,7 @@ function renderReport(report) {
     if (index > 2) td.className = "num";
     totals.appendChild(td);
   });
+  renderPie(totalTokens);
   } finally {
     rendering = false;
   }
@@ -294,6 +372,10 @@ projectFilter.addEventListener("change", onFilterChange);
 userFilter.addEventListener("change", onFilterChange);
 modelFilter.addEventListener("change", onFilterChange);
 
+themeToggle.addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+applyTheme(initialTheme());
 bindPairs();
 enter().catch((err) => {
   if (err.message !== "unauthorized") showLogin(err.message);
