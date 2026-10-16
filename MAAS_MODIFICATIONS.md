@@ -24,7 +24,8 @@ These are new objects. They are not patches of existing MaaS objects.
 | 3 | Grafana `maas-tokenomics`, GrafanaDatasource `thanos`, GrafanaDashboard `maas-tokenomics`, dashboard ConfigMap | `maas-finops-ui` |
 | 3 | ConfigMap `maas-tokenomics-dashboard` labeled `console.openshift.io/dashboard=true` and `console.openshift.io/odc-dashboard=true` | `openshift-config-managed` (OpenShift console dashboard menus) |
 | 3 | ConfigMap `maas-tokenomics-dashboard` | RHOAI monitoring namespace, default `redhat-ods-monitoring` |
-| 3 | `PersesDashboard` `dashboard-maas-tokenomics`, when that CRD already exists | same |
+| 3 | NetworkPolicy `tokenomics-perses-operator-access` so the Perses operator in `openshift-operators` can publish dashboards | same |
+| 3 | `PersesDashboard` `dashboard-maas-tokenomics` and `dashboard-cost-per-token-admin`, when that CRD already exists | same |
 | 4 | Service CA ConfigMap, PVC, Secrets, Deployment with an `oauth-proxy` sidecar, Service, reencrypt Route, NetworkPolicy | `maas-finops-ui` |
 
 Phase 3 does not modify `dashboard-3-maas-usage-admin` or any other dashboard. If `redhat-ods-monitoring` is absent, phase 3 stops and tells you to set `OBS_NAMESPACE`. It will not create that namespace.

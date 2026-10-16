@@ -284,7 +284,9 @@ phase3() {
   echo "Grafana routes in ${FINOPS_NAMESPACE}:"
   oc -n "${FINOPS_NAMESPACE}" get route -o jsonpath='{range .items[*]}{.metadata.name}{" https://"}{.spec.host}{"\n"}{end}' || true
   if oc get crd persesdashboards.perses.dev >/dev/null 2>&1; then
+    apply_file "${ROOT}/deploy/phase3/perses-operator-networkpolicy.yaml"
     apply_file "${ROOT}/deploy/phase3/persesdashboard.yaml"
+    apply_file "${ROOT}/deploy/phase3/cost-per-token-dashboard.yaml"
   else
     echo "PersesDashboard CRD is not installed. The RHOAI Observability tab will not show Tokenomics until Cluster Observability Operator is installed."
   fi
@@ -487,7 +489,8 @@ undeploy() {
   oc -n openshift-operators delete subscription grafana-operator --ignore-not-found
   oc -n openshift-operators delete csv -l operators.coreos.com/grafana-operator.openshift-operators= --ignore-not-found
   oc delete clusterrolebinding "${FINOPS_NAMESPACE}-grafana-monitoring-view" --ignore-not-found
-  oc -n "${OBS_NAMESPACE}" delete persesdashboard dashboard-maas-tokenomics --ignore-not-found
+  oc -n "${OBS_NAMESPACE}" delete persesdashboard dashboard-maas-tokenomics dashboard-cost-per-token-admin --ignore-not-found
+  oc -n "${OBS_NAMESPACE}" delete networkpolicy tokenomics-perses-operator-access --ignore-not-found
   oc -n "${OBS_NAMESPACE}" delete configmap maas-tokenomics-dashboard --ignore-not-found
   oc -n "${CONSOLE_NAMESPACE}" delete configmap maas-tokenomics-dashboard --ignore-not-found
   oc delete clusterrolebinding "${UI_NAMESPACE}-monitoring-view" --ignore-not-found

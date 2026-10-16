@@ -98,6 +98,23 @@ def test_grafana_operator_resources_select_the_same_instance() -> None:
     assert "deploy/phase3/dashboard-observability-patch.yaml" in script
     assert "data-science-prometheus-cluster-proxy" in script
     assert "observabilityDashboard" in (ROOT / "deploy/phase3/odh-observability-dashboard-patch.yaml").read_text(encoding="utf-8")
+    cost = next(yaml.safe_load_all(render((ROOT / "deploy/phase3/cost-per-token-dashboard.yaml").read_text(encoding="utf-8"))))
+    assert cost["apiVersion"] == "perses.dev/v1alpha2"
+    assert cost["metadata"]["name"] == "dashboard-cost-per-token-admin"
+    assert cost["metadata"]["namespace"] == "redhat-ods-monitoring"
+    assert cost["metadata"]["labels"]["app.opendatahub.io/dashboard"] == "true"
+    assert cost["metadata"]["labels"]["platform.opendatahub.io/part-of"] == "dashboard"
+    assert cost["spec"]["config"]["display"]["name"] == "Cost per token"
+    rendered_cost = render((ROOT / "deploy/phase3/cost-per-token-dashboard.yaml").read_text(encoding="utf-8"))
+    assert "cluster-prometheus-datasource" in rendered_cost
+    assert "kserve_vllm:generation_tokens_total" in rendered_cost
+    assert "deploy/phase3/cost-per-token-dashboard.yaml" in script
+    policy = next(yaml.safe_load_all(render((ROOT / "deploy/phase3/perses-operator-networkpolicy.yaml").read_text(encoding="utf-8"))))
+    assert policy["metadata"]["name"] == "tokenomics-perses-operator-access"
+    assert policy["metadata"]["namespace"] == "redhat-ods-monitoring"
+    assert policy["spec"]["ingress"][0]["ports"][0]["port"] == 8080
+    assert policy["spec"]["ingress"][0]["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] == "openshift-operators"
+    assert "deploy/phase3/perses-operator-networkpolicy.yaml" in script
 
 
 def test_images_are_built_from_ubi_containerfiles() -> None:

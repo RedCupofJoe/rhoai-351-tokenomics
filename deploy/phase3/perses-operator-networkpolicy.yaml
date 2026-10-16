@@ -1,0 +1,28 @@
+# Cluster Observability Operator runs perses-operator in openshift-operators.
+# OpenShift AI only admits that operator from openshift-cluster-observability-operator,
+# so PersesDashboard sync times out and the Observability UI stays empty.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tokenomics-perses-operator-access
+  namespace: __OBS_NAMESPACE__
+  labels:
+    app.kubernetes.io/part-of: rhoai-tokenomics
+    app.kubernetes.io/component: observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: perses-operator
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-operators
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: perses-operator
+      ports:
+        - protocol: TCP
+          port: 8080
