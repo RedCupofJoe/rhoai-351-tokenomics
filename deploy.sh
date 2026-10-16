@@ -400,6 +400,24 @@ reload_catalog_if_needed() {
   exit 1
 }
 
+ensure_researcher_ingest_secret() {
+  local encoded token
+  encoded="$(oc -n "${FINOPS_NAMESPACE}" get secret maas-tokenomics-credentials -o jsonpath='{.data.ingest-token}' 2>/dev/null || true)"
+  if [[ -z "${encoded}" ]]; then
+    echo "Pricing ingest secret is not available. Researcher chats will not be recorded."
+    return 0
+  fi
+  token="$(printf '%s' "${encoded}" | base64 -d)"
+  if [[ -z "${token}" ]]; then
+    echo "Pricing ingest secret is empty. Researcher chats will not be recorded."
+    return 0
+  fi
+  oc -n "${CARAVAN_NAMESPACE}" create secret generic maas-tokenomics-ingest \
+    --from-literal=ingest-token="${token}" \
+    --dry-run=client -o yaml | oc apply -f -
+  echo "Researcher can record chat usage."
+}
+
 ensure_researcher_image() {
   apply_file "${ROOT}/deploy/build/researcher-build.yaml"
   if [[ "${REBUILD_RESEARCHER:-false}" != "true" ]] && oc -n "${CARAVAN_NAMESPACE}" get imagestreamtag researcher-agent:0.1.0 >/dev/null 2>&1; then
@@ -450,6 +468,7 @@ phase5() {
       echo "OPENAI_API_KEY was empty. Set it with: oc -n ${CARAVAN_NAMESPACE} create secret generic ojoseph-test-agent-secret --from-literal=OPENAI_API_KEY=... --dry-run=client -o yaml | oc apply -f -"
     fi
   fi
+  ensure_researcher_ingest_secret
   ensure_named_secret "${CARAVAN_NAMESPACE}" open-webui-secret WEBUI_SECRET_KEY "$(openssl rand -hex 32)"
   ensure_named_secret "${CARAVAN_NAMESPACE}" open-webui-oauth-cookie session_secret "$(openssl rand -base64 32 | tr -d '\n')"
   apply_file "${ROOT}/deploy/caravan/50-service.yaml"

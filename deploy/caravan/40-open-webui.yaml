@@ -62,12 +62,29 @@ spec:
                   key: OPENAI_API_KEY
             - name: DEFAULT_MODELS
               value: __OPENAI_MODEL__
+            - name: OPENAI_API_BASE_URLS
+              value: __OPENAI_BASE_URL__;http://researcher-agent.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/v1
+            - name: OPENAI_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: ojoseph-test-agent-secret
+                  key: OPENAI_API_KEY
+            - name: ENABLE_FORWARD_USER_INFO_HEADERS
+              value: "true"
+            - name: AIOHTTP_CLIENT_TIMEOUT
+              value: "300"
             - name: ENABLE_OLLAMA_API
               value: "false"
             - name: ENABLE_PERSISTENT_CONFIG
               value: "false"
             - name: WEBUI_AUTH
               value: "false"
+            - name: WEBUI_AUTH_TRUSTED_EMAIL_HEADER
+              value: X-Forwarded-User
+            - name: WEBUI_AUTH_TRUSTED_NAME_HEADER
+              value: X-Forwarded-Preferred-Username
+            - name: DEFAULT_USER_ROLE
+              value: user
             - name: WEBUI_SECRET_KEY
               valueFrom:
                 secretKeyRef:

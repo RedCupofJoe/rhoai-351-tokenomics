@@ -1,11 +1,15 @@
 """Researcher agent. Serves an agent card and calls MCP plus the MaaS gateway."""
 
+import hashlib
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+
+CHAT_MODEL_ID = "researcher-agent"
 
 PROTOCOL_VERSIONS = ("2025-03-26", "2024-11-05")
 
@@ -180,6 +184,17 @@ def usage_from_completion(document: dict) -> dict:
     }
 
 
+def message_text(message: dict) -> str:
+    """Prefer the final answer. Some reasoning models leave that field blank."""
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    reasoning = message.get("reasoning") or message.get("reasoning_content") or ""
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()
+    return ""
+
+
 def complete(prompt: str) -> tuple[str, dict]:
     base = os.environ.get("OPENAI_BASE_URL", "").rstrip("/")
     key = os.environ.get("OPENAI_API_KEY", "")
@@ -191,7 +206,17 @@ def complete(prompt: str) -> tuple[str, dict]:
         data=json.dumps(
             {
                 "model": model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Tool results are already included. "
+                            "Do not call tools or plan searches. "
+                            "Write the final answer only."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
                 "max_tokens": 900,
             }
         ).encode("utf-8"),
@@ -210,8 +235,10 @@ def complete(prompt: str) -> tuple[str, dict]:
         raise MCPError(f"MaaS unreachable: {exc.reason}") from None
     choices = document.get("choices") or []
     text = ""
-    if choices:
-        text = ((choices[0].get("message") or {}).get("content") or "")[:2000]
+    if choices and isinstance(choices[0], dict):
+        message = choices[0].get("message") or {}
+        if isinstance(message, dict):
+            text = message_text(message)[:2000]
     return text, usage_from_completion(document)
 
 
@@ -328,7 +355,7 @@ def research(
         text = finding.get("search") or finding.get("error") or ", ".join(finding.get("tools") or [])
         notes.append(f"{name}: {_clip(text, 1600)}")
     prompt = (
-        "Answer every part of the question from these tool notes. "
+        "Answer every part of the question from these source notes. "
         "Name the source for each part, and say what the sources do not establish.\n"
         + "\n".join(notes)
     )
@@ -352,6 +379,174 @@ def research(
     if answer_error:
         report["answerError"] = answer_error
     return report
+
+
+def chat_user(headers, document: dict) -> str:
+    """Name the chat for showback.
+
+    Open WebUI forwards its signed-in user when asked. The OpenShift
+    proxy header is used when that user header is absent.
+    """
+    for key in (
+        "X-OpenWebUI-User-Name",
+        "X-OpenWebUI-User-Email",
+        "X-Forwarded-User",
+        "X-Forwarded-Preferred-Username",
+    ):
+        value = str(headers.get(key) or "").strip()
+        if value:
+            return value[:200]
+    raw = document.get("user")
+    if isinstance(raw, dict):
+        value = str(raw.get("name") or raw.get("email") or raw.get("id") or "").strip()
+        if value:
+            return value[:200]
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()[:200]
+    return "open-webui"
+
+
+def messages_query(document: dict) -> str:
+    messages = document.get("messages") if isinstance(document.get("messages"), list) else []
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        if isinstance(content, list):
+            parts = [
+                str(item.get("text") or "").strip()
+                for item in content
+                if isinstance(item, dict) and str(item.get("text") or "").strip()
+            ]
+            if parts:
+                return "\n".join(parts)
+    query = str(document.get("query") or "").strip()
+    return query
+
+
+def openai_model_list() -> dict:
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": CHAT_MODEL_ID,
+                "object": "model",
+                "owned_by": "tokenomics",
+                "name": "researcher agent",
+            }
+        ],
+    }
+
+
+def _usage_block(usage: dict) -> dict:
+    prompt = int(usage.get("prompt_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or 0)
+    cached = int(usage.get("cached_tokens") or 0)
+    total = int(usage.get("total_tokens") or 0) or prompt + completion
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+        "prompt_tokens_details": {"cached_tokens": cached},
+    }
+
+
+def completion_document(answer: str, usage: dict) -> dict:
+    return {
+        "id": "chatcmpl-researcher",
+        "object": "chat.completion",
+        "model": CHAT_MODEL_ID,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": answer},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": _usage_block(usage),
+    }
+
+
+def completion_stream(answer: str, usage: dict) -> bytes:
+    created = int(time.time())
+    pieces = [answer[index : index + 240] for index in range(0, len(answer), 240)] or [answer]
+    lines = []
+    for index, piece in enumerate(pieces):
+        delta = {"content": piece}
+        if index == 0:
+            delta = {"role": "assistant", "content": piece}
+        chunk = {
+            "id": "chatcmpl-researcher",
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": CHAT_MODEL_ID,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+        }
+        lines.append("data: " + json.dumps(chunk) + "\n\n")
+    final = {
+        "id": "chatcmpl-researcher",
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": CHAT_MODEL_ID,
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        "usage": _usage_block(usage),
+    }
+    lines.append("data: " + json.dumps(final) + "\n\n")
+    lines.append("data: [DONE]\n\n")
+    return "".join(lines).encode("utf-8")
+
+
+def ingest_event(user: str, usage: dict, query: str) -> dict:
+    digest = hashlib.sha256(f"{user}\n{query}\n{time.time_ns()}".encode("utf-8")).hexdigest()[:16]
+    return {
+        "id": "webui-" + digest,
+        "user": user or "open-webui",
+        "model": CHAT_MODEL_ID,
+        "namespace": os.environ.get("USAGE_NAMESPACE", "test-project"),
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+        "cached_tokens": int(usage.get("cached_tokens") or 0),
+    }
+
+
+def post_ingest(user: str, usage: dict, query: str) -> None:
+    """Record the agent's gateway usage. A missing ingest token skips quietly."""
+    url = os.environ.get("INGEST_URL", "").strip()
+    token = os.environ.get("INGEST_TOKEN", "").strip()
+    spent = int(usage.get("prompt_tokens") or 0) + int(usage.get("completion_tokens") or 0)
+    if not url or not token or spent <= 0:
+        return
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(ingest_event(user, usage, query)).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print("researcher ingest failed: " + str(exc)[:200], flush=True)
+
+
+def answer_chat(document: dict, headers) -> tuple[int, str, bytes]:
+    query = messages_query(document)[:2500]
+    if not query:
+        query = "Say what this researcher can look up."
+    user = chat_user(headers, document)
+    report = research(query, user=user)
+    answer = str(report.get("answer") or "").strip()
+    if not answer:
+        answer = str(report.get("answerError") or "The researcher did not return an answer.")
+    usage = report.get("usage") if isinstance(report.get("usage"), dict) else usage_from_completion({})
+    post_ingest(user, usage, query)
+    if document.get("stream") is True:
+        return 200, "text/event-stream", completion_stream(answer, usage)
+    body = json.dumps(completion_document(answer, usage)).encode("utf-8")
+    return 200, "application/json", body
 
 
 def _string_list(value) -> list[str]:
@@ -384,10 +579,28 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(agent_card()).encode("utf-8")
             self._send(200, body, "application/json")
             return
+        if path in {"/v1/models", "/models"}:
+            body = json.dumps(openai_model_list()).encode("utf-8")
+            self._send(200, body, "application/json")
+            return
         self._send(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path in {"/v1/chat/completions", "/chat/completions"}:
+            length = int(self.headers.get("Content-Length") or "0")
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                document = json.loads(raw.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                self._send(400, b'{"error":"invalid json"}', "application/json")
+                return
+            if not isinstance(document, dict):
+                self._send(400, b'{"error":"invalid json"}', "application/json")
+                return
+            status, content_type, body = answer_chat(document, self.headers)
+            self._send(status, body, content_type)
+            return
         if path != "/research":
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return

@@ -146,8 +146,17 @@ def test_open_webui_is_behind_the_openshift_login_sidecar() -> None:
     assert host["value"] == "127.0.0.1"
     base = next(item for item in containers["open-webui"]["env"] if item["name"] == "OPENAI_API_BASE_URL")
     assert base["value"] == "https://maas.example/v1"
+    urls = next(item for item in containers["open-webui"]["env"] if item["name"] == "OPENAI_API_BASE_URLS")
+    assert urls["value"].startswith("https://maas.example/v1;")
+    assert urls["value"].endswith("http://researcher-agent.test-project.svc.cluster.local:8080/v1")
+    default_model = next(item for item in containers["open-webui"]["env"] if item["name"] == "DEFAULT_MODELS")
+    assert default_model["value"] == "example-model"
     persist = next(item for item in containers["open-webui"]["env"] if item["name"] == "ENABLE_PERSISTENT_CONFIG")
     assert persist["value"] == "false"
+    trusted = next(item for item in containers["open-webui"]["env"] if item["name"] == "WEBUI_AUTH_TRUSTED_EMAIL_HEADER")
+    assert trusted["value"] == "X-Forwarded-User"
+    role = next(item for item in containers["open-webui"]["env"] if item["name"] == "DEFAULT_USER_ROLE")
+    assert role["value"] == "user"
     assert any("http://127.0.0.1:8080" in arg for arg in containers["oauth-proxy"]["args"])
     assert containers["oauth-proxy"]["image"] == "registry.example/oauth-proxy:v4.18"
     route = next(yaml.safe_load_all(render((ROOT / "deploy/caravan/60-route.yaml").read_text(encoding="utf-8"))))
@@ -303,13 +312,21 @@ def test_research_catalog_and_agent_manifests() -> None:
     container = researcher["spec"]["template"]["spec"]["containers"][0]
     assert container["image"] == "registry.example/researcher-agent:0.1.0"
     assert researcher["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/component"] == "agent"
-    key = container["env"][-4]["valueFrom"]["secretKeyRef"]
+    key = next(item for item in container["env"] if item["name"] == "OPENAI_API_KEY")["valueFrom"]["secretKeyRef"]
     assert key == {"name": "ojoseph-test-agent-secret", "key": "OPENAI_API_KEY"}
-    policy = next(yaml.safe_load_all(render((ROOT / "deploy/caravan/70-networkpolicy.yaml").read_text(encoding="utf-8"))))
+    ingest = next(item for item in container["env"] if item["name"] == "INGEST_URL")
+    assert ingest["value"] == "http://maas-tokenomics-exporter.maas-finops.svc.cluster.local:8080/v1/usage"
+    policies = list(yaml.safe_load_all(render((ROOT / "deploy/caravan/70-networkpolicy.yaml").read_text(encoding="utf-8"))))
+    policy = policies[0]
+    webui_policy = next(item for item in policies if item["metadata"]["name"] == "open-webui")
+    webui_ports = {port["port"] for rule in webui_policy["spec"]["egress"] for port in rule["ports"]}
+    assert 8080 in webui_ports
+    assert policy["spec"]["ingress"][0]["from"][0]["podSelector"]["matchLabels"]["app"] == "open-webui"
     ports = {port["port"] for rule in policy["spec"]["egress"] for port in rule["ports"]}
     assert {53, 443, 6443, 8080} <= ports
     source = (ROOT / "researcher/app.py").read_text(encoding="utf-8")
     assert "/healthz" in source
     assert "/.well-known/agent-card.json" in source
+    assert "/v1/chat/completions" in source
     assert '"researcher agent"' in source
     assert "OPENAI_API_KEY=" not in (ROOT / "deploy/caravan/36-researcher-agent.yaml").read_text(encoding="utf-8")

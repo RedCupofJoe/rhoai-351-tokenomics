@@ -59,6 +59,16 @@ spec:
               value: http://wikipedia-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
             - name: MCP_ARXIV_URL
               value: http://arxiv-mcp.__CARAVAN_NAMESPACE__.svc.cluster.local:8080/mcp
+            - name: INGEST_URL
+              value: http://maas-tokenomics-exporter.__FINOPS_NAMESPACE__.svc.cluster.local:8080/v1/usage
+            - name: USAGE_NAMESPACE
+              value: __CARAVAN_NAMESPACE__
+            - name: INGEST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: maas-tokenomics-ingest
+                  key: ingest-token
+                  optional: true
           readinessProbe:
             httpGet:
               path: /healthz

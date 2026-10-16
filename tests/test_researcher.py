@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 from researcher.app import agent_card, decode_mcp_body, usage_from_completion
@@ -16,6 +17,117 @@ def test_decode_mcp_body_reads_json_and_sse() -> None:
     body = 'event: message\ndata: {"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n'
     decoded = decode_mcp_body(body, "text/event-stream")
     assert decoded["id"] == 2
+
+
+def test_open_webui_chat_selects_the_researcher_and_records_usage(monkeypatch) -> None:
+    from researcher.app import (
+        CHAT_MODEL_ID,
+        answer_chat,
+        chat_user,
+        completion_document,
+        ingest_event,
+        messages_query,
+        openai_model_list,
+    )
+
+    assert openai_model_list()["data"][0]["id"] == CHAT_MODEL_ID
+    assert openai_model_list()["data"][0]["name"] == "researcher agent"
+    document = {
+        "model": CHAT_MODEL_ID,
+        "messages": [
+            {"role": "system", "content": "be brief"},
+            {"role": "user", "content": [{"type": "text", "text": "What is a token?"}]},
+        ],
+    }
+    assert messages_query(document) == "What is a token?"
+    assert chat_user({"X-OpenWebUI-User-Name": "nora"}, document) == "nora"
+    assert chat_user({}, {}) == "open-webui"
+
+    def fake_research(query, page_url="", user="", searches=None, urls=None, articles=None, papers=None):
+        assert query == "What is a token?"
+        assert user == "nora"
+        return {
+            "answer": "A token is a piece of text.",
+            "usage": {
+                "prompt_tokens": 12,
+                "completion_tokens": 4,
+                "total_tokens": 16,
+                "cached_tokens": 1,
+            },
+        }
+
+    monkeypatch.setattr("researcher.app.research", fake_research)
+    posted = {}
+
+    def fake_post(user, usage, query):
+        posted["event"] = ingest_event(user, usage, query)
+
+    monkeypatch.setattr("researcher.app.post_ingest", fake_post)
+    status, content_type, body = answer_chat(document, {"X-OpenWebUI-User-Name": "nora"})
+    assert status == 200
+    assert content_type == "application/json"
+    payload = json.loads(body)
+    assert payload["model"] == CHAT_MODEL_ID
+    assert payload["choices"][0]["message"]["content"] == "A token is a piece of text."
+    assert payload["usage"]["prompt_tokens_details"]["cached_tokens"] == 1
+    assert posted["event"]["user"] == "nora"
+    assert posted["event"]["model"] == CHAT_MODEL_ID
+    assert posted["event"]["namespace"] == "test-project"
+    assert posted["event"]["cached_tokens"] == 1
+    streamed = completion_document("hello", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cached_tokens": 0})
+    assert streamed["choices"][0]["finish_reason"] == "stop"
+
+
+def test_complete_asks_for_a_final_answer_and_reads_reasoning(monkeypatch) -> None:
+    from researcher.app import complete
+
+    captured = {}
+
+    class Response:
+        def __init__(self, document: dict):
+            self.document = document
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self.document).encode("utf-8")
+
+    def urlopen(request, timeout=0):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        if captured.get("blank"):
+            document = {
+                "choices": [{"message": {"content": "  ", "reasoning": "A pod groups containers."}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+            }
+        else:
+            document = {
+                "choices": [{"message": {"content": "A pod groups containers.", "reasoning": "think"}}],
+                "usage": {
+                    "prompt_tokens": 3,
+                    "completion_tokens": 4,
+                    "total_tokens": 7,
+                    "prompt_tokens_details": {"cached_tokens": 1},
+                },
+            }
+        return Response(document)
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://gateway/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt")
+    monkeypatch.setattr("researcher.app.urllib.request.urlopen", urlopen)
+    text, usage = complete("What is a pod?")
+    assert captured["body"]["messages"][0]["role"] == "system"
+    assert "Do not call tools" in captured["body"]["messages"][0]["content"]
+    assert captured["body"]["messages"][1] == {"role": "user", "content": "What is a pod?"}
+    assert text == "A pod groups containers."
+    assert usage["cached_tokens"] == 1
+    captured["blank"] = True
+    text, _usage = complete("What is a pod?")
+    assert text == "A pod groups containers."
 
 
 def test_usage_from_completion_keeps_cache_tokens() -> None:

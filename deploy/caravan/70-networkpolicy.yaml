@@ -12,6 +12,14 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: open-webui
+      ports:
+        - protocol: TCP
+          port: 8080
   egress:
     - ports:
         - protocol: UDP
@@ -66,5 +74,7 @@ spec:
           port: 443
         - protocol: TCP
           port: 6443
+        - protocol: TCP
+          port: 8080
         - protocol: TCP
           port: 8443

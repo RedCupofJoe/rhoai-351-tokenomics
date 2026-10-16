@@ -26,6 +26,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: openshift-logging
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: __CARAVAN_NAMESPACE__
       ports:
         - protocol: TCP
           port: 8080
